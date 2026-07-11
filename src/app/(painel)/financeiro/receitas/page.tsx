@@ -7,7 +7,7 @@ import {
 } from '@/components/ui';
 import { addMeses, diasAte, fmtData, fmtMoeda, hojeISO, mesAtualISO } from '@/lib/utils';
 import type { Cobranca } from '@/types';
-import { CheckCircle2, MessageCircle, Plus, RefreshCw, Store, Users, XCircle } from 'lucide-react';
+import { CheckCircle2, MessageCircle, Store, Users, XCircle } from 'lucide-react';
 
 type Aba = 'pendentes' | 'pagas' | 'todas';
 
@@ -16,7 +16,6 @@ export default function ReceitasPage() {
   const [aba, setAba] = useState<Aba>('pendentes');
   const [cobrancas, setCobrancas] = useState<Cobranca[]>([]);
   const [carregando, setCarregando] = useState(true);
-  const [gerando, setGerando] = useState(false);
   const [enviandoId, setEnviandoId] = useState<string | null>(null);
 
   // modal de pagamento
@@ -26,13 +25,72 @@ export default function ReceitasPage() {
   const [renovar, setRenovar] = useState(true);
   const [salvandoPg, setSalvandoPg] = useState(false);
 
+  // Garante, sem precisar de botão, que todo cliente ativo e todo revendedor master
+  // tenham a receita esperada lançada aqui (clientes: ao serem cadastrados já entram;
+  // isto aqui cobre cadastros antigos e a virada de mês das revendas).
+  async function reconciliar(cobrancasAtuais: Cobranca[]) {
+    const [{ data: clientesAtivos }, { data: revendasAtivas }] = await Promise.all([
+      supabase.from('clientes').select('id, valor, data_vencimento, planos(nome)').eq('status', 'ativo'),
+      supabase.from('revendedores').select('id, valor_por_acesso, quantidade_clientes, dia_vencimento').eq('tipo', 'master').eq('ativo', true),
+    ]);
+
+    const pendentesCliente = new Set(
+      cobrancasAtuais.filter((c) => c.tipo === 'cliente' && c.status === 'pendente').map((c) => c.cliente_id)
+    );
+    const novasCliente = (clientesAtivos ?? [])
+      .filter((c: any) => c.data_vencimento && !pendentesCliente.has(c.id))
+      .map((c: any) => ({
+        tipo: 'cliente',
+        cliente_id: c.id,
+        descricao: c.planos?.nome ? `Assinatura — ${c.planos.nome}` : 'Assinatura',
+        valor: c.valor,
+        vencimento: c.data_vencimento,
+      }));
+
+    const mes = mesAtualISO();
+    const revendasGeradasEsteMes = new Set(
+      cobrancasAtuais
+        .filter((c) => c.tipo === 'revendedor' && c.vencimento.startsWith(mes) && c.status !== 'cancelado')
+        .map((c) => c.revendedor_id)
+    );
+    const novasRevenda = (revendasAtivas ?? [])
+      .filter((r: any) => !revendasGeradasEsteMes.has(r.id) && (r.quantidade_clientes ?? 0) > 0)
+      .map((r: any) => {
+        const dia = String(Math.min(r.dia_vencimento ?? 10, 28)).padStart(2, '0');
+        return {
+          tipo: 'revendedor',
+          revendedor_id: r.id,
+          descricao: `Mensalidade — ${r.quantidade_clientes} acesso(s) × ${fmtMoeda(r.valor_por_acesso)}`,
+          valor: Math.round(r.quantidade_clientes * r.valor_por_acesso * 100) / 100,
+          vencimento: `${mes}-${dia}`,
+        };
+      });
+
+    const novas = [...novasCliente, ...novasRevenda];
+    if (novas.length > 0) {
+      await supabase.from('cobrancas').insert(novas);
+    }
+    return novas.length > 0;
+  }
+
   async function carregar() {
     setCarregando(true);
-    const { data } = await supabase
+    const { data: primeira } = await supabase
       .from('cobrancas')
       .select('*, clientes(*, planos(*), revendedores(*)), revendedores(*)')
       .order('vencimento', { ascending: true });
-    setCobrancas((data as Cobranca[]) ?? []);
+
+    const gerouAlgo = await reconciliar((primeira as Cobranca[]) ?? []);
+
+    if (gerouAlgo) {
+      const { data: atualizada } = await supabase
+        .from('cobrancas')
+        .select('*, clientes(*, planos(*), revendedores(*)), revendedores(*)')
+        .order('vencimento', { ascending: true });
+      setCobrancas((atualizada as Cobranca[]) ?? []);
+    } else {
+      setCobrancas((primeira as Cobranca[]) ?? []);
+    }
     setCarregando(false);
   }
 
@@ -40,91 +98,6 @@ export default function ReceitasPage() {
     carregar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Gera cobranças de renovação para clientes com vencimento nos próximos 7 dias (ou vencidos)
-  async function gerarRenovacoes() {
-    setGerando(true);
-    try {
-      const { data: clientes } = await supabase
-        .from('clientes')
-        .select('*, planos(*)')
-        .eq('status', 'ativo')
-        .not('data_vencimento', 'is', null);
-      const pendentes = new Set(
-        cobrancas.filter((c) => c.status === 'pendente' && c.cliente_id).map((c) => c.cliente_id)
-      );
-      const novas = (clientes ?? [])
-        .filter((c) => {
-          const dias = diasAte(c.data_vencimento);
-          return dias !== null && dias <= 7 && !pendentes.has(c.id);
-        })
-        .map((c) => ({
-          tipo: 'cliente',
-          cliente_id: c.id,
-          descricao: `Renovação ${c.planos?.nome ?? ''}`.trim(),
-          valor: c.valor,
-          vencimento: c.data_vencimento,
-        }));
-      if (novas.length === 0) {
-        toast('Nenhuma renovação nova para gerar (vencimentos nos próximos 7 dias).');
-      } else {
-        const { error } = await supabase.from('cobrancas').insert(novas);
-        if (error) throw new Error(error.message);
-        toast(`${novas.length} cobrança(s) de renovação gerada(s).`);
-        await carregar();
-      }
-    } catch (e: any) {
-      toast(`Erro: ${e.message}`, 'erro');
-    } finally {
-      setGerando(false);
-    }
-  }
-
-  // Gera a receita mensal dos revendedores master: clientes ativos × valor por acesso
-  async function gerarMensalidades() {
-    setGerando(true);
-    try {
-      const mes = mesAtualISO();
-      const [{ data: revs }, { data: clientes }] = await Promise.all([
-        supabase.from('revendedores').select('*').eq('tipo', 'master').eq('ativo', true),
-        supabase.from('clientes').select('id, revendedor_id').eq('status', 'ativo'),
-      ]);
-      const contagem: Record<string, number> = {};
-      for (const c of clientes ?? []) {
-        if (c.revendedor_id) contagem[c.revendedor_id] = (contagem[c.revendedor_id] ?? 0) + 1;
-      }
-      const jaGeradas = new Set(
-        cobrancas
-          .filter((c) => c.tipo === 'revendedor' && c.vencimento.startsWith(mes) && c.status !== 'cancelado')
-          .map((c) => c.revendedor_id)
-      );
-      const novas = (revs ?? [])
-        .filter((r) => !jaGeradas.has(r.id) && (contagem[r.id] ?? 0) > 0)
-        .map((r) => {
-          const qtd = contagem[r.id] ?? 0;
-          const dia = String(Math.min(r.dia_vencimento ?? 10, 28)).padStart(2, '0');
-          return {
-            tipo: 'revendedor',
-            revendedor_id: r.id,
-            descricao: `Mensalidade — ${qtd} acesso(s) × ${fmtMoeda(r.valor_por_acesso)}`,
-            valor: qtd * r.valor_por_acesso,
-            vencimento: `${mes}-${dia}`,
-          };
-        });
-      if (novas.length === 0) {
-        toast('Nenhuma receita nova de revenda (já gerada neste mês ou sem clientes ativos).');
-      } else {
-        const { error } = await supabase.from('cobrancas').insert(novas);
-        if (error) throw new Error(error.message);
-        toast(`${novas.length} receita(s) de revenda gerada(s).`);
-        await carregar();
-      }
-    } catch (e: any) {
-      toast(`Erro: ${e.message}`, 'erro');
-    } finally {
-      setGerando(false);
-    }
-  }
 
   function abrirPagamento(c: Cobranca) {
     setPagando(c);
@@ -145,16 +118,23 @@ export default function ReceitasPage() {
 
       const cliente = pagando.clientes;
 
-      // Renova o vencimento do cliente conforme o plano
+      // Renova o vencimento do cliente e já lança a próxima receita, sem precisar de botão
       if (renovar && pagando.tipo === 'cliente' && cliente?.planos) {
         const base =
           cliente.data_vencimento && cliente.data_vencimento >= hojeISO()
             ? cliente.data_vencimento
             : hojeISO();
-        await supabase
-          .from('clientes')
-          .update({ data_vencimento: addMeses(base, cliente.planos.meses) })
-          .eq('id', cliente.id);
+        const novoVencimento = addMeses(base, cliente.planos.meses);
+
+        await supabase.from('clientes').update({ data_vencimento: novoVencimento }).eq('id', cliente.id);
+
+        await supabase.from('cobrancas').insert({
+          tipo: 'cliente',
+          cliente_id: cliente.id,
+          descricao: `Assinatura — ${cliente.planos.nome}`,
+          valor: cliente.valor,
+          vencimento: novoVencimento,
+        });
       }
 
       // Gera comissão para o indicador, se houver (aparece em Financeiro > Despesas > Comissões)
@@ -228,20 +208,7 @@ export default function ReceitasPage() {
 
   return (
     <div>
-      <PageTitle
-        title="Receitas"
-        subtitle="Cobranças de clientes e mensalidades de revendas"
-        action={
-          <div className="flex gap-2">
-            <Btn variant="secondary" onClick={gerarRenovacoes} disabled={gerando}>
-              <RefreshCw size={15} /> Gerar renovações
-            </Btn>
-            <Btn variant="secondary" onClick={gerarMensalidades} disabled={gerando}>
-              <Plus size={15} /> Gerar receita de revendas
-            </Btn>
-          </div>
-        }
-      />
+      <PageTitle title="Receitas" subtitle="Gerado automaticamente — nenhum botão para clicar" />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex items-center gap-3">
@@ -264,9 +231,9 @@ export default function ReceitasPage() {
         </div>
       </div>
       <p className="text-xs text-slate-400 -mt-3 mb-4">
-        A receita de cada revendedor é calculada em <b>Revendas &gt; Revendedores</b>: quanto ele paga por
-        acesso × quantos clientes ativos ele tem. Clique em <b>Gerar receita de revendas</b> para lançar a
-        mensalidade do mês aqui.
+        Todo cliente cadastrado entra aqui sozinho. A receita de cada revendedor master vem do que foi
+        informado no cadastro dele (Revendas &gt; Revendedores): quanto ele paga por acesso × quantos
+        clientes ele tem.
       </p>
 
       <div className="flex gap-1 mb-4 bg-slate-200/70 rounded-lg p-1 w-fit">
@@ -294,7 +261,7 @@ export default function ReceitasPage() {
       {carregando ? (
         <Carregando />
       ) : visiveis.length === 0 ? (
-        <Vazio>Nenhuma cobrança aqui. Use os botões acima para gerar renovações e receita de revendas.</Vazio>
+        <Vazio>Nenhuma cobrança aqui.</Vazio>
       ) : (
         <Tabela>
           <thead>
@@ -416,7 +383,7 @@ export default function ReceitasPage() {
             {pagando.tipo === 'cliente' && (
               <label className="flex items-center gap-2 text-sm text-slate-700">
                 <input type="checkbox" checked={renovar} onChange={(e) => setRenovar(e.target.checked)} />
-                Renovar vencimento do cliente conforme o plano
+                Renovar vencimento e já lançar a próxima receita
               </label>
             )}
           </div>

@@ -35,7 +35,8 @@ export default function ClientesPage() {
     const [cli, pla, rev, disp, cfg] = await Promise.all([
       supabase.from('clientes').select('*, planos(*), revendedores(*)').order('nome'),
       supabase.from('planos').select('*').eq('ativo', true).order('meses'),
-      supabase.from('revendedores').select('*').eq('ativo', true).order('nome'),
+      // Só indicadores ficam vinculados aqui — revendedor master tem painel próprio
+      supabase.from('revendedores').select('*').eq('ativo', true).eq('tipo', 'indicacao').order('nome'),
       supabase.from('dispositivos').select('*').order('ordem'),
       supabase.from('settings').select('valor').eq('chave', 'links_padrao').maybeSingle(),
     ]);
@@ -84,28 +85,55 @@ export default function ClientesPage() {
   async function salvar() {
     if (!form.nome.trim()) return toast('Informe o nome do cliente.', 'erro');
     setSalvando(true);
+    const valor = parseFloat(form.valor || '0') || 0;
+    const dataVencimento = form.data_vencimento || null;
     const registro = {
       nome: form.nome.trim(),
       telefone: form.telefone ? normalizarTelefone(form.telefone) : null,
       usuario: form.usuario || null,
       senha: form.senha || null,
       plano_id: form.plano_id || null,
-      valor: parseFloat(form.valor || '0') || 0,
+      valor,
       m3u_link: form.m3u_link || null,
       dispositivo: form.dispositivo || null,
       aplicativo: form.aplicativo || null,
       revendedor_id: form.revendedor_id || null,
       data_ativacao: form.data_ativacao || hojeISO(),
-      data_vencimento: form.data_vencimento || null,
+      data_vencimento: dataVencimento,
       status: form.status,
       observacoes: form.observacoes || null,
     };
-    const { error } = editandoId
-      ? await supabase.from('clientes').update(registro).eq('id', editandoId)
-      : await supabase.from('clientes').insert(registro);
+
+    if (editandoId) {
+      const { error } = await supabase.from('clientes').update(registro).eq('id', editandoId);
+      setSalvando(false);
+      if (error) return toast(`Erro ao salvar: ${error.message}`, 'erro');
+      toast('Cliente atualizado.');
+      setModal(false);
+      carregar();
+      return;
+    }
+
+    const { data: novo, error } = await supabase.from('clientes').insert(registro).select().single();
+    if (error) {
+      setSalvando(false);
+      return toast(`Erro ao salvar: ${error.message}`, 'erro');
+    }
+
+    // Todo cliente novo já entra em Financeiro > Receitas automaticamente, sem precisar gerar nada
+    if (registro.status === 'ativo' && dataVencimento && novo) {
+      const plano = planos.find((p) => p.id === registro.plano_id);
+      await supabase.from('cobrancas').insert({
+        tipo: 'cliente',
+        cliente_id: novo.id,
+        descricao: plano ? `Assinatura — ${plano.nome}` : 'Assinatura',
+        valor,
+        vencimento: dataVencimento,
+      });
+    }
+
     setSalvando(false);
-    if (error) return toast(`Erro ao salvar: ${error.message}`, 'erro');
-    toast(editandoId ? 'Cliente atualizado.' : 'Cliente cadastrado.');
+    toast('Cliente cadastrado.');
     setModal(false);
     carregar();
   }
@@ -309,12 +337,16 @@ export default function ClientesPage() {
               <option value={form.aplicativo}>{form.aplicativo}</option>
             )}
           </Select>
-          <Select label="Revendedor / Indicador" value={form.revendedor_id} onChange={(e) => setForm({ ...form, revendedor_id: e.target.value })} className="sm:col-span-2">
-            <option value="">Venda direta (sem revendedor)</option>
+          <Select
+            label="Indicador (opcional)"
+            value={form.revendedor_id}
+            onChange={(e) => setForm({ ...form, revendedor_id: e.target.value })}
+            className="sm:col-span-2"
+            hint="Revendedor master não entra aqui — ele tem painel próprio e sua receita é lançada no cadastro dele"
+          >
+            <option value="">Nenhum indicador</option>
             {revendedores.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.tipo === 'master' ? '👑 ' : '🤝 '}{r.nome}
-              </option>
+              <option key={r.id} value={r.id}>🤝 {r.nome}</option>
             ))}
           </Select>
           <Input label="Link M3U (opcional)" className="sm:col-span-2" placeholder={links?.m3u ? `Padrão: ${links.m3u}` : 'Deixe vazio para usar o link padrão das Configurações'} value={form.m3u_link} onChange={(e) => setForm({ ...form, m3u_link: e.target.value })} />

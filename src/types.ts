@@ -13,6 +13,7 @@ export type Revendedor = {
   email: string | null;
   tipo: 'master' | 'indicacao';
   valor_por_acesso: number;
+  quantidade_clientes: number;
   comissao_tipo: 'fixo' | 'percentual';
   comissao_valor: number;
   dia_vencimento: number;

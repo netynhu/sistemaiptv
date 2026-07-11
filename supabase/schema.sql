@@ -35,9 +35,11 @@ create table if not exists public.revendedores (
   telefone text,
   email text,
   tipo text not null check (tipo in ('master','indicacao')),
-  -- master: quanto ele paga por acesso/cliente ativo (mensalidade)
+  -- master: quanto ele paga por acesso e quantos clientes ele tem (informado manualmente —
+  -- o revendedor master opera o próprio painel, os clientes dele não são cadastrados aqui)
   valor_por_acesso numeric(10,2) not null default 0,
-  -- indicação: comissão por pagamento de cliente indicado
+  quantidade_clientes int not null default 0,
+  -- indicação: comissão por pagamento de cliente indicado (cliente É cadastrado aqui, vinculado)
   comissao_tipo text not null default 'fixo' check (comissao_tipo in ('fixo','percentual')),
   comissao_valor numeric(10,2) not null default 0,
   dia_vencimento int not null default 10 check (dia_vencimento between 1 and 28),
@@ -46,6 +48,9 @@ create table if not exists public.revendedores (
   observacoes text,
   criado_em timestamptz not null default now()
 );
+
+-- Migração para bancos já existentes (roda seguro mesmo se a tabela já foi criada antes)
+alter table public.revendedores add column if not exists quantidade_clientes int not null default 0;
 
 -- ------------------------------------------------------------
 -- CLIENTES

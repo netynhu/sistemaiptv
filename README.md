@@ -11,11 +11,11 @@ Sistema de gestão de clientes de TV por assinatura com revendedores, comissões
 | Módulo | O que faz |
 |---|---|
 | **Dashboard** | KPIs (clientes ativos, vencimentos, receita, despesas, lucro) e gráfico receita × despesas |
-| **Clientes** | Cadastro com plano, usuário/senha, link M3U (padrão ou próprio), dispositivo/app e vínculo com revendedor ou indicador |
-| **Revendedores Master** | Fazem as próprias vendas e pagam mensalidade por acesso ativo |
-| **Indicadores** | Recebem comissão (fixa ou %) a cada pagamento de cliente indicado |
-| **Financeiro** | Gera renovações e mensalidades, registra pagamentos (renova vencimento e gera comissão automaticamente) e envia cobrança por WhatsApp |
-| **Despesas** | Lançamentos por categoria com filtro mensal |
+| **Clientes** | Cadastro com plano, usuário/senha, link M3U (padrão ou próprio), dispositivo/app e vínculo opcional com um indicador. Ao cadastrar, a receita já é lançada sozinha — nenhum botão para gerar cobrança |
+| **Revendedores Master** | Têm painel próprio (não cadastramos os clientes deles aqui) — só informamos quanto pagam por acesso e quantos clientes têm, e a receita mensal é gerada/atualizada sozinha |
+| **Indicação** | Recebem comissão (fixa ou %) gerada automaticamente em Despesas assim que o cliente indicado paga |
+| **Financeiro > Receitas** | Cobranças de clientes e mensalidade de revendas — tudo gerado automaticamente, só falta clicar em "Cobrar" (WhatsApp) e "Receber" |
+| **Financeiro > Despesas** | Lançamentos por categoria com filtro mensal + aba de Comissões dos indicadores |
 | **Relatórios** | Resumo mensal: receita, despesas, lucro, comissões, novos clientes — com impressão/PDF |
 | **Suporte** | Inbox das conversas de WhatsApp, agente de IA que responde sozinho, botão "Assumir conversa" e guia de instalação de apps por dispositivo |
 | **Configurações** | Valores dos planos, comissões padrão, links padrão (M3U, Smarters, XCIPTV, Assist Plus), Uazapi (QR Code + proxy por cidade), tokens (Mercado Pago, Asaas, PicPay), agente de IA e modelos de mensagem |
@@ -25,7 +25,7 @@ Sistema de gestão de clientes de TV por assinatura com revendedores, comissões
 ## Passo 1 — Criar o projeto no Supabase
 
 1. Acesse [supabase.com](https://supabase.com) e crie um projeto novo.
-2. No menu lateral, abra **SQL Editor**, cole todo o conteúdo de [`supabase/schema.sql`](supabase/schema.sql) e clique em **Run**. Isso cria as tabelas, a segurança (RLS) e os dados iniciais (planos, apps compatíveis e tutoriais do PDF).
+2. No menu lateral, abra **SQL Editor**, cole todo o conteúdo de [`supabase/schema.sql`](supabase/schema.sql) e clique em **Run**. Isso cria as tabelas, a segurança (RLS) e os dados iniciais (planos, apps compatíveis e tutoriais do PDF). O arquivo é seguro para rodar de novo a qualquer momento (ex.: depois de um `git pull` com mudanças no schema) — ele só cria o que ainda não existe e adiciona colunas novas sem apagar dados.
 3. Crie o(s) usuário(s) administrador(es): **Authentication > Users > Add user** → informe e-mail e senha (marque *Auto confirm*). São esses logins que acessam o sistema.
 4. Copie as chaves em **Project Settings > API**:
    - `Project URL`
@@ -80,10 +80,11 @@ Acesse http://localhost:3000 e entre com o usuário criado no Passo 1.
 
 1. **Configurações > Planos** — confira os valores dos planos e padrões de comissão.
 2. **Configurações > Links padrão** — cadastre o link M3U padrão (se ele mudar, atualize só aqui).
-3. Cadastre em **Revendas**: os *Revendedores* (master, pagam por acesso) e a *Indicação* (indicadores, recebem comissão) — depois cadastre os **clientes**.
-4. Em **Financeiro > Receitas**, use *Gerar renovações* (clientes que vencem em 7 dias) e *Gerar receita de revendas* (1× por mês — calcula quantos clientes ativos cada revendedor tem × quanto ele paga por acesso).
-5. Clique em **Cobrar** para enviar a cobrança por WhatsApp e **Receber** quando o pagamento chegar — o vencimento renova e a comissão do indicador é gerada sozinha (ela aparece em **Financeiro > Despesas > Comissões**, já que é um valor pago para fora).
-6. Lance as **despesas gerais** em **Financeiro > Despesas** e acompanhe o **relatório mensal**.
+3. Em **Revendas > Revendedores**, cadastre os revendedores master: nome, quanto pagam por acesso e **quantos clientes têm** (os clientes deles ficam no painel próprio — não são cadastrados aqui). A receita mensal desse revendedor já é lançada/atualizada sozinha em Financeiro > Receitas.
+4. Em **Revendas > Indicação**, cadastre quem indica clientes e a comissão (fixa ou %).
+5. Cadastre os **clientes** normalmente — ao salvar, a receita dele já cai em **Financeiro > Receitas**, sem precisar gerar nada. Se o cliente veio de indicação, vincule o indicador no cadastro.
+6. Em **Financeiro > Receitas**, clique em **Cobrar** para enviar a cobrança por WhatsApp e **Receber** quando o pagamento chegar — o vencimento renova e a próxima receita já é lançada sozinha. Se o cliente tinha indicador, a comissão vai direto para **Financeiro > Despesas > Comissões**.
+7. Lance as **despesas gerais** em **Financeiro > Despesas** e acompanhe o **relatório mensal**.
 
 ## Estrutura do projeto
 
