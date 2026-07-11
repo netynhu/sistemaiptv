@@ -1,0 +1,182 @@
+'use client';
+
+import { useEffect, useMemo, useState } from 'react';
+import { createClient } from '@/lib/supabase/client';
+import { Btn, Card, Carregando, PageTitle, Vazio } from '@/components/ui';
+import { fmtMoeda, mesAtualISO, nomeMes } from '@/lib/utils';
+import { Printer } from 'lucide-react';
+
+type Resumo = {
+  receitaClientes: number;
+  receitaRevendas: number;
+  despesas: number;
+  comissoesGeradas: number;
+  comissoesPagas: number;
+  novosClientes: number;
+  cancelamentos: number;
+  porForma: Record<string, number>;
+  porCategoria: Record<string, number>;
+};
+
+export default function RelatoriosPage() {
+  const supabase = useMemo(() => createClient(), []);
+  const [mes, setMes] = useState(mesAtualISO());
+  const [resumo, setResumo] = useState<Resumo | null>(null);
+  const [carregando, setCarregando] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      setCarregando(true);
+      const inicio = `${mes}-01`;
+      const [y, m] = mes.split('-').map(Number);
+      const fim = new Date(y, m, 0).toISOString().slice(0, 10);
+      const fimTs = `${fim}T23:59:59`;
+
+      const [cobPagas, desp, comGeradas, comPagas, novos, cancelados] = await Promise.all([
+        supabase.from('cobrancas').select('valor, tipo, forma_pagamento').eq('status', 'pago').gte('pago_em', inicio).lte('pago_em', fim),
+        supabase.from('despesas').select('valor, categoria').gte('data', inicio).lte('data', fim),
+        supabase.from('comissoes').select('valor').gte('criado_em', inicio).lte('criado_em', fimTs),
+        supabase.from('comissoes').select('valor').eq('status', 'pago').gte('pago_em', inicio).lte('pago_em', fim),
+        supabase.from('clientes').select('id').gte('data_ativacao', inicio).lte('data_ativacao', fim),
+        supabase.from('clientes').select('id').eq('status', 'cancelado').gte('criado_em', inicio),
+      ]);
+
+      const pagas = cobPagas.data ?? [];
+      const porForma: Record<string, number> = {};
+      for (const c of pagas) {
+        const f = c.forma_pagamento || 'Não informado';
+        porForma[f] = (porForma[f] ?? 0) + Number(c.valor);
+      }
+      const porCategoria: Record<string, number> = {};
+      for (const d of desp.data ?? []) {
+        porCategoria[d.categoria] = (porCategoria[d.categoria] ?? 0) + Number(d.valor);
+      }
+
+      setResumo({
+        receitaClientes: pagas.filter((c) => c.tipo === 'cliente').reduce((s, c) => s + Number(c.valor), 0),
+        receitaRevendas: pagas.filter((c) => c.tipo === 'revendedor').reduce((s, c) => s + Number(c.valor), 0),
+        despesas: (desp.data ?? []).reduce((s, d) => s + Number(d.valor), 0),
+        comissoesGeradas: (comGeradas.data ?? []).reduce((s, c) => s + Number(c.valor), 0),
+        comissoesPagas: (comPagas.data ?? []).reduce((s, c) => s + Number(c.valor), 0),
+        novosClientes: novos.data?.length ?? 0,
+        cancelamentos: cancelados.data?.length ?? 0,
+        porForma,
+        porCategoria,
+      });
+      setCarregando(false);
+    })();
+  }, [mes, supabase]);
+
+  if (carregando || !resumo) return <Carregando />;
+
+  const receitaTotal = resumo.receitaClientes + resumo.receitaRevendas;
+  const lucro = receitaTotal - resumo.despesas;
+
+  return (
+    <div>
+      <PageTitle
+        title="Relatório mensal"
+        subtitle={nomeMes(mes)}
+        action={
+          <div className="no-print flex gap-2 items-center">
+            <input
+              type="month"
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+              value={mes}
+              onChange={(e) => setMes(e.target.value)}
+            />
+            <Btn variant="secondary" onClick={() => window.print()}>
+              <Printer size={15} /> Imprimir / PDF
+            </Btn>
+          </div>
+        }
+      />
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+        {[
+          ['Receita total', fmtMoeda(receitaTotal), 'text-emerald-600'],
+          ['Despesas', fmtMoeda(resumo.despesas), 'text-rose-600'],
+          ['Lucro', fmtMoeda(lucro), lucro >= 0 ? 'text-emerald-600' : 'text-rose-600'],
+          ['Comissões geradas', fmtMoeda(resumo.comissoesGeradas), 'text-violet-600'],
+        ].map(([label, valor, cor]) => (
+          <div key={label as string} className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+            <div className="text-[11px] text-slate-500">{label}</div>
+            <div className={`text-xl font-bold ${cor}`}>{valor}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
+        <Card title="Composição da receita">
+          <ul className="text-sm space-y-2">
+            <li className="flex justify-between">
+              <span>Pagamentos de clientes</span>
+              <b>{fmtMoeda(resumo.receitaClientes)}</b>
+            </li>
+            <li className="flex justify-between">
+              <span>Mensalidades de revendedores</span>
+              <b>{fmtMoeda(resumo.receitaRevendas)}</b>
+            </li>
+            <li className="flex justify-between border-t border-slate-100 pt-2">
+              <span>Comissões pagas no mês</span>
+              <b className="text-rose-600">− {fmtMoeda(resumo.comissoesPagas)}</b>
+            </li>
+          </ul>
+        </Card>
+
+        <Card title="Movimentação de clientes">
+          <ul className="text-sm space-y-2">
+            <li className="flex justify-between">
+              <span>Novos clientes no mês</span>
+              <b className="text-emerald-600">{resumo.novosClientes}</b>
+            </li>
+            <li className="flex justify-between">
+              <span>Cancelamentos</span>
+              <b className="text-rose-600">{resumo.cancelamentos}</b>
+            </li>
+          </ul>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <Card title="Recebimentos por forma de pagamento">
+          {Object.keys(resumo.porForma).length === 0 ? (
+            <Vazio>Nenhum recebimento no mês.</Vazio>
+          ) : (
+            <table className="w-full text-sm">
+              <tbody>
+                {Object.entries(resumo.porForma)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([forma, valor]) => (
+                    <tr key={forma} className="border-b border-slate-100 last:border-0">
+                      <td className="py-2">{forma}</td>
+                      <td className="py-2 text-right font-medium">{fmtMoeda(valor)}</td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          )}
+        </Card>
+
+        <Card title="Despesas por categoria">
+          {Object.keys(resumo.porCategoria).length === 0 ? (
+            <Vazio>Nenhuma despesa no mês.</Vazio>
+          ) : (
+            <table className="w-full text-sm">
+              <tbody>
+                {Object.entries(resumo.porCategoria)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([cat, valor]) => (
+                    <tr key={cat} className="border-b border-slate-100 last:border-0">
+                      <td className="py-2">{cat}</td>
+                      <td className="py-2 text-right font-medium">{fmtMoeda(valor)}</td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          )}
+        </Card>
+      </div>
+    </div>
+  );
+}

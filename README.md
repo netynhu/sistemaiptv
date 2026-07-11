@@ -1,36 +1,107 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Sistema Alfenas — Gestão e Controle
 
-## Getting Started
+Sistema de gestão de clientes de TV por assinatura com revendedores, comissões, cobrança via WhatsApp (Uazapi), agente de IA para suporte, controle financeiro e relatórios.
 
-First, run the development server:
+**Stack:** Next.js 14 (App Router) + Supabase (banco + autenticação) + Vercel (hospedagem).
+
+---
+
+## Funcionalidades
+
+| Módulo | O que faz |
+|---|---|
+| **Dashboard** | KPIs (clientes ativos, vencimentos, receita, despesas, lucro) e gráfico receita × despesas |
+| **Clientes** | Cadastro com plano, usuário/senha, link M3U (padrão ou próprio), dispositivo/app e vínculo com revendedor ou indicador |
+| **Revendedores Master** | Fazem as próprias vendas e pagam mensalidade por acesso ativo |
+| **Indicadores** | Recebem comissão (fixa ou %) a cada pagamento de cliente indicado |
+| **Financeiro** | Gera renovações e mensalidades, registra pagamentos (renova vencimento e gera comissão automaticamente) e envia cobrança por WhatsApp |
+| **Despesas** | Lançamentos por categoria com filtro mensal |
+| **Relatórios** | Resumo mensal: receita, despesas, lucro, comissões, novos clientes — com impressão/PDF |
+| **Suporte** | Inbox das conversas de WhatsApp, agente de IA que responde sozinho, botão "Assumir conversa" e guia de instalação de apps por dispositivo |
+| **Configurações** | Valores dos planos, comissões padrão, links padrão (M3U, Smarters, XCIPTV, Assist Plus), Uazapi (QR Code + proxy por cidade), tokens (Mercado Pago, Asaas, PicPay), agente de IA e modelos de mensagem |
+
+---
+
+## Passo 1 — Criar o projeto no Supabase
+
+1. Acesse [supabase.com](https://supabase.com) e crie um projeto novo.
+2. No menu lateral, abra **SQL Editor**, cole todo o conteúdo de [`supabase/schema.sql`](supabase/schema.sql) e clique em **Run**. Isso cria as tabelas, a segurança (RLS) e os dados iniciais (planos, apps compatíveis e tutoriais do PDF).
+3. Crie o(s) usuário(s) administrador(es): **Authentication > Users > Add user** → informe e-mail e senha (marque *Auto confirm*). São esses logins que acessam o sistema.
+4. Copie as chaves em **Project Settings > API**:
+   - `Project URL`
+   - `anon public` key
+   - `service_role` key (secreta — nunca exponha no navegador)
+
+## Passo 2 — Rodar localmente (opcional)
+
+```bash
+npm install
+```
+
+Edite o arquivo `.env.local` com os dados reais do Supabase:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://SEU-PROJETO.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=sua-anon-key
+SUPABASE_SERVICE_ROLE_KEY=sua-service-role-key
+WEBHOOK_SECRET=um-segredo-aleatorio-qualquer
+```
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Acesse http://localhost:3000 e entre com o usuário criado no Passo 1.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Passo 3 — Publicar na Vercel
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. Suba o projeto para um repositório no GitHub.
+2. Em [vercel.com](https://vercel.com), **Add New > Project** e importe o repositório.
+3. Em **Environment Variables**, cadastre as mesmas 4 variáveis do `.env.local`.
+4. Deploy. O sistema ficará em `https://seu-projeto.vercel.app`.
 
-## Learn More
+## Passo 4 — Conectar o WhatsApp (Uazapi)
 
-To learn more about Next.js, take a look at the following resources:
+1. No sistema, abra **Configurações > WhatsApp (Uazapi)**.
+2. Preencha a **URL do servidor** (ex.: `https://seuservidor.uazapi.com`) e o **Admin token** do seu plano Uazapi.
+3. Clique em **Criar instância** (o token da instância é salvo sozinho).
+4. *(Opcional)* Na seção **Proxy**, preencha host/porta/usuário/senha do seu provedor de proxy e selecione a **cidade** — use `{cidade}` no usuário se o provedor aceitar cidade no login (ex.: `user-city-{cidade}`). Clique em **Aplicar proxy** *antes* de conectar.
+5. Clique em **Conectar / Gerar QR** e escaneie o QR Code no WhatsApp do celular (Aparelhos conectados).
+6. Clique em **Configurar webhook** — isso faz as mensagens recebidas caírem na aba **Suporte**.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Passo 5 — Ativar o agente de IA do suporte
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+1. Abra **Configurações > Agente de IA**.
+2. Escolha o provedor (Anthropic/Claude ou OpenAI), cole a **chave de API** e ative o agente.
+3. O agente já recebe automaticamente a base de conhecimento com os **apps compatíveis por dispositivo e os passos de instalação** (importados do PDF), com os links padrão preenchidos.
+4. Na aba **Suporte**, você acompanha as conversas em tempo real. Clique em **Assumir conversa** para o humano atender (a IA para de responder aquele contato) e **Devolver para IA** quando terminar.
 
-## Deploy on Vercel
+## Rotina de uso sugerida
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+1. **Configurações > Planos** — confira os valores dos planos e padrões de comissão.
+2. **Configurações > Links padrão** — cadastre o link M3U padrão (se ele mudar, atualize só aqui).
+3. Cadastre **revendedores/indicadores** e depois os **clientes**.
+4. No **Financeiro**, use *Gerar renovações* (clientes que vencem em 7 dias) e *Mensalidades revendas* (1× por mês).
+5. Clique em **Cobrar** para enviar a cobrança por WhatsApp e **Receber** quando o pagamento chegar — o vencimento renova e a comissão do indicador é gerada sozinha.
+6. Lance as **despesas** e acompanhe o **relatório mensal**.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Estrutura do projeto
+
+```
+supabase/schema.sql        ← script do banco (rodar no Supabase)
+docs/                      ← PDF original de apps compatíveis
+src/app/(painel)/          ← páginas: dashboard, clientes, revendedores, indicadores,
+                              financeiro, despesas, relatorios, suporte, configuracoes
+src/app/api/uazapi/        ← ações na instância (criar, QR, status, proxy, webhook)
+src/app/api/webhook/uazapi ← recebe mensagens do WhatsApp (+ resposta da IA)
+src/app/api/cobranca/enviar← envia cobrança por WhatsApp
+src/app/api/suporte/enviar ← envio manual do atendente
+src/lib/uazapi.ts          ← cliente da API Uazapi
+src/lib/ia.ts              ← agente de IA + base de conhecimento
+```
+
+## Observações
+
+- **Tokens de pagamento** (Mercado Pago, Asaas, PicPay Empresas) ficam salvos em Configurações > Pagamentos, prontos para integrações de cobrança automática; hoje a cobrança usa a chave PIX no texto do WhatsApp.
+- Os endpoints da Uazapi variam um pouco entre versões do servidor; se "Aplicar proxy" falhar, confira o caminho correto na documentação do seu servidor e ajuste `src/lib/uazapi.ts`.
+- As tabelas `dispositivos`/`tutoriais` podem ser editadas direto no Supabase para incluir novos apps no guia e na base da IA.
