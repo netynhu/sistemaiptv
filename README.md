@@ -80,18 +80,20 @@ Acesse http://localhost:3000 e entre com o usuário criado no Passo 1.
 
 1. **Configurações > Planos** — confira os valores dos planos e padrões de comissão.
 2. **Configurações > Links padrão** — cadastre o link M3U padrão (se ele mudar, atualize só aqui).
-3. Cadastre **revendedores/indicadores** e depois os **clientes**.
-4. No **Financeiro**, use *Gerar renovações* (clientes que vencem em 7 dias) e *Mensalidades revendas* (1× por mês).
-5. Clique em **Cobrar** para enviar a cobrança por WhatsApp e **Receber** quando o pagamento chegar — o vencimento renova e a comissão do indicador é gerada sozinha.
-6. Lance as **despesas** e acompanhe o **relatório mensal**.
+3. Cadastre em **Revendas**: os *Revendedores* (master, pagam por acesso) e a *Indicação* (indicadores, recebem comissão) — depois cadastre os **clientes**.
+4. Em **Financeiro > Receitas**, use *Gerar renovações* (clientes que vencem em 7 dias) e *Gerar receita de revendas* (1× por mês — calcula quantos clientes ativos cada revendedor tem × quanto ele paga por acesso).
+5. Clique em **Cobrar** para enviar a cobrança por WhatsApp e **Receber** quando o pagamento chegar — o vencimento renova e a comissão do indicador é gerada sozinha (ela aparece em **Financeiro > Despesas > Comissões**, já que é um valor pago para fora).
+6. Lance as **despesas gerais** em **Financeiro > Despesas** e acompanhe o **relatório mensal**.
 
 ## Estrutura do projeto
 
 ```
 supabase/schema.sql        ← script do banco (rodar no Supabase)
 docs/                      ← PDF original de apps compatíveis
-src/app/(painel)/          ← páginas: dashboard, clientes, revendedores, indicadores,
-                              financeiro, despesas, relatorios, suporte, configuracoes
+src/app/(painel)/          ← páginas: dashboard, clientes,
+                              revendas/revendedores, revendas/indicacao,
+                              financeiro/receitas, financeiro/despesas,
+                              relatorios, suporte, configuracoes
 src/app/api/uazapi/        ← ações na instância (criar, QR, status, proxy, webhook)
 src/app/api/webhook/uazapi ← recebe mensagens do WhatsApp (+ resposta da IA)
 src/app/api/cobranca/enviar← envia cobrança por WhatsApp

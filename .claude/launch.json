@@ -4,7 +4,7 @@
     {
       "name": "sistema-alfenas",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "start"],
+      "runtimeArgs": ["run", "dev"],
       "port": 3000
     }
   ]

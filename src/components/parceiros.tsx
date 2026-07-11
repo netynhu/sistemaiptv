@@ -22,7 +22,7 @@ const TEXTOS = {
     modalEditar: 'Editar revendedor',
   },
   indicacao: {
-    titulo: 'Indicadores',
+    titulo: 'Indicação',
     subtitulo: 'Indicam clientes e recebem comissão por pagamento',
     novo: 'Novo indicador',
     modalNovo: 'Novo indicador',

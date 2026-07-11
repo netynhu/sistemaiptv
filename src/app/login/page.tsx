@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Btn, Input } from '@/components/ui';
-import { Tv } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -34,14 +33,6 @@ export default function LoginPage() {
         onSubmit={entrar}
         className="w-full max-w-sm bg-white rounded-2xl shadow-2xl p-8 space-y-4"
       >
-        <div className="flex flex-col items-center gap-2 mb-2">
-          <div className="w-12 h-12 rounded-xl bg-indigo-600 text-white flex items-center justify-center">
-            <Tv size={26} />
-          </div>
-          <h1 className="text-lg font-bold text-slate-900">Sistema Alfenas</h1>
-          <p className="text-xs text-slate-500">Acesso restrito a administradores</p>
-        </div>
-
         <Input
           label="E-mail"
           type="email"
@@ -64,10 +55,6 @@ export default function LoginPage() {
         <Btn type="submit" className="w-full" disabled={carregando}>
           {carregando ? 'Entrando…' : 'Entrar'}
         </Btn>
-
-        <p className="text-[11px] text-slate-400 text-center">
-          Os administradores são cadastrados no painel do Supabase (Authentication &gt; Users).
-        </p>
       </form>
     </div>
   );
