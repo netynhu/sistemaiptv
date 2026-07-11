@@ -11,12 +11,12 @@ Sistema de gestão de clientes de TV por assinatura com revendedores, comissões
 | Módulo | O que faz |
 |---|---|
 | **Dashboard** | KPIs (clientes ativos, vencimentos, receita, despesas, lucro) e gráfico receita × despesas |
-| **Clientes** | Cadastro com plano, usuário/senha, link M3U (padrão ou próprio), dispositivo/app e vínculo opcional com um indicador. Ao cadastrar, a receita já é lançada sozinha — nenhum botão para gerar cobrança |
+| **Clientes** | Cadastro com plano, usuário/senha, link M3U (padrão ou próprio), dispositivo/app, telas simultâneas (um app por tela) e vínculo opcional com um indicador. Ao cadastrar, a receita já é lançada sozinha — nenhum botão para gerar cobrança |
 | **Revendedores Master** | Têm painel próprio (não cadastramos os clientes deles aqui) — só informamos quanto pagam por acesso e quantos clientes têm, e a receita mensal é gerada/atualizada sozinha |
 | **Indicação** | Recebem comissão (fixa ou %) gerada automaticamente em Despesas assim que o cliente indicado paga |
 | **Financeiro > Receitas** | Cobranças de clientes e mensalidade de revendas — tudo gerado automaticamente, só falta clicar em "Cobrar" (WhatsApp) e "Receber" |
-| **Financeiro > Despesas** | Lançamentos por categoria com filtro mensal + aba de Comissões dos indicadores |
-| **Relatórios** | Resumo mensal: receita, despesas, lucro, comissões, novos clientes — com impressão/PDF |
+| **Financeiro > Despesas** | Dashboard de KPIs, lançamentos por categoria com filtro mensal e status pago/pendente, e aba **Indicações** com acesso direto ao PIX do indicador para pagar manualmente |
+| **Relatórios** | Resumo mensal: receita, despesas, lucro, comissões, novos clientes, custo estimado de telas dos clientes — com impressão/PDF |
 | **Suporte** | Inbox das conversas de WhatsApp, agente de IA que responde sozinho, botão "Assumir conversa" e guia de instalação de apps por dispositivo |
 | **Configurações** | Valores dos planos, comissões padrão, links padrão (M3U, Smarters, XCIPTV, Assist Plus), Uazapi (QR Code + proxy por cidade), tokens (Mercado Pago, Asaas, PicPay), agente de IA e modelos de mensagem |
 

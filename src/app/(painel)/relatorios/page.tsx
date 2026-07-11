@@ -6,6 +6,8 @@ import { Btn, Card, Carregando, PageTitle, Vazio } from '@/components/ui';
 import { fmtMoeda, mesAtualISO, nomeMes } from '@/lib/utils';
 import { Printer } from 'lucide-react';
 
+const CUSTO_POR_TELA = 1.5;
+
 type Resumo = {
   receitaClientes: number;
   receitaRevendas: number;
@@ -16,6 +18,8 @@ type Resumo = {
   cancelamentos: number;
   porForma: Record<string, number>;
   porCategoria: Record<string, number>;
+  totalTelas: number;
+  telasAssistPlus: number;
 };
 
 export default function RelatoriosPage() {
@@ -32,13 +36,14 @@ export default function RelatoriosPage() {
       const fim = new Date(y, m, 0).toISOString().slice(0, 10);
       const fimTs = `${fim}T23:59:59`;
 
-      const [cobPagas, desp, comGeradas, comPagas, novos, cancelados] = await Promise.all([
+      const [cobPagas, desp, comGeradas, comPagas, novos, cancelados, telas] = await Promise.all([
         supabase.from('cobrancas').select('valor, tipo, forma_pagamento').eq('status', 'pago').gte('pago_em', inicio).lte('pago_em', fim),
         supabase.from('despesas').select('valor, categoria').gte('data', inicio).lte('data', fim),
         supabase.from('comissoes').select('valor').gte('criado_em', inicio).lte('criado_em', fimTs),
         supabase.from('comissoes').select('valor').eq('status', 'pago').gte('pago_em', inicio).lte('pago_em', fim),
         supabase.from('clientes').select('id').gte('data_ativacao', inicio).lte('data_ativacao', fim),
         supabase.from('clientes').select('id').eq('status', 'cancelado').gte('criado_em', inicio),
+        supabase.from('clientes').select('telas_apps').eq('status', 'ativo'),
       ]);
 
       const pagas = cobPagas.data ?? [];
@@ -52,6 +57,8 @@ export default function RelatoriosPage() {
         porCategoria[d.categoria] = (porCategoria[d.categoria] ?? 0) + Number(d.valor);
       }
 
+      const todasTelas = (telas.data ?? []).flatMap((c: any) => (c.telas_apps as string[]) ?? []);
+
       setResumo({
         receitaClientes: pagas.filter((c) => c.tipo === 'cliente').reduce((s, c) => s + Number(c.valor), 0),
         receitaRevendas: pagas.filter((c) => c.tipo === 'revendedor').reduce((s, c) => s + Number(c.valor), 0),
@@ -62,6 +69,8 @@ export default function RelatoriosPage() {
         cancelamentos: cancelados.data?.length ?? 0,
         porForma,
         porCategoria,
+        totalTelas: todasTelas.length,
+        telasAssistPlus: todasTelas.filter((a) => a === 'Assist Plus').length,
       });
       setCarregando(false);
     })();
@@ -175,6 +184,30 @@ export default function RelatoriosPage() {
               </tbody>
             </table>
           )}
+        </Card>
+      </div>
+
+      <div className="mt-5">
+        <Card title="Custo de telas dos clientes ativos (informativo)">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
+            <div>
+              <div className="text-slate-500 text-[11px]">Telas simultâneas ativas</div>
+              <div className="text-xl font-bold text-slate-900">{resumo.totalTelas}</div>
+            </div>
+            <div>
+              <div className="text-slate-500 text-[11px]">Custo estimado ({fmtMoeda(CUSTO_POR_TELA)}/tela)</div>
+              <div className="text-xl font-bold text-slate-900">{fmtMoeda(resumo.totalTelas * CUSTO_POR_TELA)}</div>
+            </div>
+            <div>
+              <div className="text-slate-500 text-[11px]">Das quais Assist Plus ({resumo.telasAssistPlus} tela{resumo.telasAssistPlus === 1 ? '' : 's'})</div>
+              <div className="text-xl font-bold text-slate-900">{fmtMoeda(resumo.telasAssistPlus * CUSTO_POR_TELA)}</div>
+            </div>
+          </div>
+          <p className="text-[11px] text-slate-400 mt-3">
+            Este custo é apenas para referência de margem e não entra no total de despesas — exceto a parte do
+            Assist Plus, que já está lançada em Financeiro &gt; Despesas (categoria &quot;Assist Plus&quot;) e portanto
+            já soma no total de despesas acima.
+          </p>
         </Card>
       </div>
     </div>

@@ -33,6 +33,7 @@ export type Cliente = {
   m3u_link: string | null;
   dispositivo: string | null;
   aplicativo: string | null;
+  telas_apps: string[];
   revendedor_id: string | null;
   data_ativacao: string;
   data_vencimento: string | null;
@@ -77,6 +78,9 @@ export type Despesa = {
   valor: number;
   data: string;
   recorrente: boolean;
+  pago: boolean;
+  pago_em: string | null;
+  cliente_id: string | null;
   observacoes: string | null;
 };
 

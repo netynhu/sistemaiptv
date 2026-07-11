@@ -9,9 +9,12 @@ import { addMeses, diasAte, fmtData, fmtMoeda, fmtTelefone, hojeISO, normalizarT
 import type { Cliente, Dispositivo, LinksPadrao, Plano, Revendedor } from '@/types';
 import { Copy, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 
+const CUSTO_POR_TELA = 1.5;
+const APP_ASSIST_PLUS = 'Assist Plus';
+
 const FORM_VAZIO = {
   nome: '', telefone: '', usuario: '', senha: '', plano_id: '', valor: '',
-  m3u_link: '', dispositivo: '', aplicativo: '', revendedor_id: '',
+  m3u_link: '', dispositivo: '', aplicativo: '', telas_apps: [] as string[], revendedor_id: '',
   data_ativacao: hojeISO(), data_vencimento: '', status: 'ativo', observacoes: '',
 };
 
@@ -29,6 +32,11 @@ export default function ClientesPage() {
   const [salvando, setSalvando] = useState(false);
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [form, setForm] = useState({ ...FORM_VAZIO });
+
+  const appsDisponiveis = useMemo(
+    () => Array.from(new Set(dispositivos.flatMap((d) => d.apps))).sort(),
+    [dispositivos]
+  );
 
   async function carregar() {
     setCarregando(true);
@@ -64,7 +72,7 @@ export default function ClientesPage() {
     setForm({
       nome: c.nome, telefone: c.telefone ?? '', usuario: c.usuario ?? '', senha: c.senha ?? '',
       plano_id: c.plano_id ?? '', valor: String(c.valor ?? ''), m3u_link: c.m3u_link ?? '',
-      dispositivo: c.dispositivo ?? '', aplicativo: c.aplicativo ?? '',
+      dispositivo: c.dispositivo ?? '', aplicativo: c.aplicativo ?? '', telas_apps: c.telas_apps ?? [],
       revendedor_id: c.revendedor_id ?? '', data_ativacao: c.data_ativacao,
       data_vencimento: c.data_vencimento ?? '', status: c.status, observacoes: c.observacoes ?? '',
     });
@@ -82,11 +90,48 @@ export default function ClientesPage() {
     }));
   }
 
+  function adicionarTela() {
+    setForm((f) => ({ ...f, telas_apps: [...f.telas_apps, appsDisponiveis[0] ?? ''] }));
+  }
+  function atualizarTela(indice: number, app: string) {
+    setForm((f) => ({ ...f, telas_apps: f.telas_apps.map((a, i) => (i === indice ? app : a)) }));
+  }
+  function removerTela(indice: number) {
+    setForm((f) => ({ ...f, telas_apps: f.telas_apps.filter((_, i) => i !== indice) }));
+  }
+
+  // Mantém em Financeiro > Despesas uma linha só com o custo do Assist Plus deste cliente
+  // (R$1,50 por tela que usa Assist Plus — as demais telas são só informativas, não viram despesa)
+  async function sincronizarDespesaAssistPlus(clienteId: string, nomeCliente: string, telas: string[]) {
+    const qtd = telas.filter((a) => a === APP_ASSIST_PLUS).length;
+    const { data: existente } = await supabase
+      .from('despesas')
+      .select('id')
+      .eq('cliente_id', clienteId)
+      .eq('categoria', 'Assist Plus')
+      .maybeSingle();
+
+    if (qtd > 0) {
+      const valor = Math.round(qtd * CUSTO_POR_TELA * 100) / 100;
+      const descricao = `Assist Plus — ${nomeCliente} (${qtd} tela${qtd > 1 ? 's' : ''})`;
+      if (existente) {
+        await supabase.from('despesas').update({ descricao, valor }).eq('id', existente.id);
+      } else {
+        await supabase.from('despesas').insert({
+          descricao, categoria: 'Assist Plus', valor, data: hojeISO(), recorrente: true, cliente_id: clienteId,
+        });
+      }
+    } else if (existente) {
+      await supabase.from('despesas').delete().eq('id', existente.id);
+    }
+  }
+
   async function salvar() {
     if (!form.nome.trim()) return toast('Informe o nome do cliente.', 'erro');
     setSalvando(true);
     const valor = parseFloat(form.valor || '0') || 0;
     const dataVencimento = form.data_vencimento || null;
+    const telasApps = form.telas_apps.filter((a) => a);
     const registro = {
       nome: form.nome.trim(),
       telefone: form.telefone ? normalizarTelefone(form.telefone) : null,
@@ -97,6 +142,7 @@ export default function ClientesPage() {
       m3u_link: form.m3u_link || null,
       dispositivo: form.dispositivo || null,
       aplicativo: form.aplicativo || null,
+      telas_apps: telasApps,
       revendedor_id: form.revendedor_id || null,
       data_ativacao: form.data_ativacao || hojeISO(),
       data_vencimento: dataVencimento,
@@ -106,8 +152,12 @@ export default function ClientesPage() {
 
     if (editandoId) {
       const { error } = await supabase.from('clientes').update(registro).eq('id', editandoId);
+      if (error) {
+        setSalvando(false);
+        return toast(`Erro ao salvar: ${error.message}`, 'erro');
+      }
+      await sincronizarDespesaAssistPlus(editandoId, registro.nome, telasApps);
       setSalvando(false);
-      if (error) return toast(`Erro ao salvar: ${error.message}`, 'erro');
       toast('Cliente atualizado.');
       setModal(false);
       carregar();
@@ -131,6 +181,7 @@ export default function ClientesPage() {
         vencimento: dataVencimento,
       });
     }
+    if (novo) await sincronizarDespesaAssistPlus(novo.id, registro.nome, telasApps);
 
     setSalvando(false);
     toast('Cliente cadastrado.');
@@ -139,7 +190,7 @@ export default function ClientesPage() {
   }
 
   async function excluir(c: Cliente) {
-    if (!confirm(`Excluir o cliente "${c.nome}"? As cobranças dele também serão removidas.`)) return;
+    if (!confirm(`Excluir o cliente "${c.nome}"? As cobranças e despesas ligadas a ele também serão removidas.`)) return;
     const { error } = await supabase.from('clientes').delete().eq('id', c.id);
     if (error) return toast(`Erro ao excluir: ${error.message}`, 'erro');
     toast('Cliente excluído.');
@@ -237,6 +288,7 @@ export default function ClientesPage() {
               <Th>WhatsApp</Th>
               <Th>Plano</Th>
               <Th>Valor</Th>
+              <Th>Telas</Th>
               <Th>Vencimento</Th>
               <Th>Situação</Th>
               <Th>Origem</Th>
@@ -256,6 +308,13 @@ export default function ClientesPage() {
                 <Td>{fmtTelefone(c.telefone)}</Td>
                 <Td>{c.planos?.nome ?? '—'}</Td>
                 <Td>{fmtMoeda(c.valor)}</Td>
+                <Td>
+                  {(c.telas_apps?.length ?? 0) > 0 ? (
+                    <span title={c.telas_apps.join(', ')}>{c.telas_apps.length}</span>
+                  ) : (
+                    <span className="text-slate-400">—</span>
+                  )}
+                </Td>
                 <Td>{fmtData(c.data_vencimento)}</Td>
                 <Td>{badgeVencimento(c)}</Td>
                 <Td>
@@ -328,7 +387,7 @@ export default function ClientesPage() {
               <option key={d.id} value={d.nome}>{d.nome}</option>
             ))}
           </Select>
-          <Select label="Aplicativo" value={form.aplicativo} onChange={(e) => setForm({ ...form, aplicativo: e.target.value })}>
+          <Select label="Aplicativo principal" value={form.aplicativo} onChange={(e) => setForm({ ...form, aplicativo: e.target.value })}>
             <option value="">Selecione…</option>
             {(appsDoDispositivo.length ? appsDoDispositivo : []).map((a) => (
               <option key={a} value={a}>{a}</option>
@@ -337,6 +396,45 @@ export default function ClientesPage() {
               <option value={form.aplicativo}>{form.aplicativo}</option>
             )}
           </Select>
+
+          <div className="sm:col-span-2">
+            <span className="block text-xs font-medium text-slate-600 mb-1">
+              Telas simultâneas {form.telas_apps.length > 0 && `(${form.telas_apps.length})`}
+            </span>
+            <div className="space-y-2">
+              {form.telas_apps.map((app, i) => (
+                <div key={i} className="flex gap-2">
+                  <select
+                    className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-500"
+                    value={app}
+                    onChange={(e) => atualizarTela(i, e.target.value)}
+                  >
+                    <option value="">Selecione o app…</option>
+                    {appsDisponiveis.map((a) => (
+                      <option key={a} value={a}>{a}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => removerTela(i)}
+                    className="px-2 text-slate-400 hover:text-rose-600"
+                    title="Remover tela"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              ))}
+              <Btn type="button" size="sm" variant="secondary" onClick={adicionarTela}>
+                <Plus size={14} /> Adicionar tela
+              </Btn>
+            </div>
+            <p className="text-[11px] text-slate-400 mt-1">
+              Cada tela custa {fmtMoeda(CUSTO_POR_TELA)} (informativo, aparece só no relatório). Telas com{' '}
+              <b>Assist Plus</b> geram automaticamente uma despesa de {fmtMoeda(CUSTO_POR_TELA)} cada em
+              Financeiro &gt; Despesas.
+            </p>
+          </div>
+
           <Select
             label="Indicador (opcional)"
             value={form.revendedor_id}

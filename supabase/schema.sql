@@ -66,6 +66,7 @@ create table if not exists public.clientes (
   m3u_link text, -- vazio = usa o link padrão das Configurações
   dispositivo text,
   aplicativo text,
+  telas_apps text[] not null default '{}', -- um app por tela simultânea (custo informativo: R$1,50/tela)
   revendedor_id uuid references public.revendedores(id) on delete set null,
   data_ativacao date not null default current_date,
   data_vencimento date,
@@ -75,6 +76,7 @@ create table if not exists public.clientes (
 );
 create index if not exists idx_clientes_vencimento on public.clientes(data_vencimento);
 create index if not exists idx_clientes_revendedor on public.clientes(revendedor_id);
+alter table public.clientes add column if not exists telas_apps text[] not null default '{}';
 
 -- ------------------------------------------------------------
 -- COBRANÇAS (clientes e mensalidades de revendedores master)
@@ -121,10 +123,17 @@ create table if not exists public.despesas (
   valor numeric(10,2) not null,
   data date not null default current_date,
   recorrente boolean not null default false,
+  pago boolean not null default false,
+  pago_em date,
+  -- preenchido automaticamente quando a despesa é o custo de telas do Assist Plus de um cliente
+  cliente_id uuid references public.clientes(id) on delete cascade,
   observacoes text,
   criado_em timestamptz not null default now()
 );
 create index if not exists idx_despesas_data on public.despesas(data);
+alter table public.despesas add column if not exists pago boolean not null default false;
+alter table public.despesas add column if not exists pago_em date;
+alter table public.despesas add column if not exists cliente_id uuid references public.clientes(id) on delete cascade;
 
 -- ------------------------------------------------------------
 -- SUPORTE (conversas WhatsApp via Uazapi)
