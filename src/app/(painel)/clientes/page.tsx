@@ -91,7 +91,7 @@ export default function ClientesPage() {
   }
 
   function adicionarTela() {
-    setForm((f) => ({ ...f, telas_apps: [...f.telas_apps, appsDisponiveis[0] ?? ''] }));
+    setForm((f) => ({ ...f, telas_apps: [...f.telas_apps, ''] }));
   }
   function atualizarTela(indice: number, app: string) {
     setForm((f) => ({ ...f, telas_apps: f.telas_apps.map((a, i) => (i === indice ? app : a)) }));
@@ -100,10 +100,15 @@ export default function ClientesPage() {
     setForm((f) => ({ ...f, telas_apps: f.telas_apps.filter((_, i) => i !== indice) }));
   }
 
+  // O dispositivo/app principal já conta como a 1ª tela — "telas_apps" guarda só as extras
+  function todasAsTelas(aplicativoPrincipal: string | null, extras: string[]): string[] {
+    return [aplicativoPrincipal, ...extras].filter((a): a is string => !!a);
+  }
+
   // Mantém em Financeiro > Despesas uma linha só com o custo do Assist Plus deste cliente
   // (R$1,50 por tela que usa Assist Plus — as demais telas são só informativas, não viram despesa)
-  async function sincronizarDespesaAssistPlus(clienteId: string, nomeCliente: string, telas: string[]) {
-    const qtd = telas.filter((a) => a === APP_ASSIST_PLUS).length;
+  async function sincronizarDespesaAssistPlus(clienteId: string, nomeCliente: string, aplicativoPrincipal: string | null, extras: string[]) {
+    const qtd = todasAsTelas(aplicativoPrincipal, extras).filter((a) => a === APP_ASSIST_PLUS).length;
     const { data: existente } = await supabase
       .from('despesas')
       .select('id')
@@ -156,7 +161,7 @@ export default function ClientesPage() {
         setSalvando(false);
         return toast(`Erro ao salvar: ${error.message}`, 'erro');
       }
-      await sincronizarDespesaAssistPlus(editandoId, registro.nome, telasApps);
+      await sincronizarDespesaAssistPlus(editandoId, registro.nome, registro.aplicativo, telasApps);
       setSalvando(false);
       toast('Cliente atualizado.');
       setModal(false);
@@ -181,7 +186,7 @@ export default function ClientesPage() {
         vencimento: dataVencimento,
       });
     }
-    if (novo) await sincronizarDespesaAssistPlus(novo.id, registro.nome, telasApps);
+    if (novo) await sincronizarDespesaAssistPlus(novo.id, registro.nome, registro.aplicativo, telasApps);
 
     setSalvando(false);
     toast('Cliente cadastrado.');
@@ -309,11 +314,14 @@ export default function ClientesPage() {
                 <Td>{c.planos?.nome ?? '—'}</Td>
                 <Td>{fmtMoeda(c.valor)}</Td>
                 <Td>
-                  {(c.telas_apps?.length ?? 0) > 0 ? (
-                    <span title={c.telas_apps.join(', ')}>{c.telas_apps.length}</span>
-                  ) : (
-                    <span className="text-slate-400">—</span>
-                  )}
+                  {(() => {
+                    const todas = todasAsTelas(c.aplicativo, c.telas_apps ?? []);
+                    return todas.length > 0 ? (
+                      <span title={todas.join(', ')}>{todas.length}</span>
+                    ) : (
+                      <span className="text-slate-400">—</span>
+                    );
+                  })()}
                 </Td>
                 <Td>{fmtData(c.data_vencimento)}</Td>
                 <Td>{badgeVencimento(c)}</Td>
@@ -399,8 +407,11 @@ export default function ClientesPage() {
 
           <div className="sm:col-span-2">
             <span className="block text-xs font-medium text-slate-600 mb-1">
-              Telas simultâneas {form.telas_apps.length > 0 && `(${form.telas_apps.length})`}
+              Telas adicionais {form.telas_apps.length > 0 && `(${form.telas_apps.length})`} — total de telas: {todasAsTelas(form.aplicativo || null, form.telas_apps).length}
             </span>
+            <p className="text-[11px] text-slate-400 mb-2">
+              O Dispositivo/Aplicativo principal já conta como a 1ª tela. Só adicione aqui se o cliente tiver mais telas simultâneas.
+            </p>
             <div className="space-y-2">
               {form.telas_apps.map((app, i) => (
                 <div key={i} className="flex gap-2">
@@ -425,13 +436,13 @@ export default function ClientesPage() {
                 </div>
               ))}
               <Btn type="button" size="sm" variant="secondary" onClick={adicionarTela}>
-                <Plus size={14} /> Adicionar tela
+                <Plus size={14} /> Adicionar tela extra
               </Btn>
             </div>
             <p className="text-[11px] text-slate-400 mt-1">
               Cada tela custa {fmtMoeda(CUSTO_POR_TELA)} (informativo, aparece só no relatório). Telas com{' '}
-              <b>Assist Plus</b> geram automaticamente uma despesa de {fmtMoeda(CUSTO_POR_TELA)} cada em
-              Financeiro &gt; Despesas.
+              <b>Assist Plus</b> (incluindo se for o app principal) geram automaticamente uma despesa de{' '}
+              {fmtMoeda(CUSTO_POR_TELA)} cada em Financeiro &gt; Despesas.
             </p>
           </div>
 

@@ -43,7 +43,7 @@ export default function RelatoriosPage() {
         supabase.from('comissoes').select('valor').eq('status', 'pago').gte('pago_em', inicio).lte('pago_em', fim),
         supabase.from('clientes').select('id').gte('data_ativacao', inicio).lte('data_ativacao', fim),
         supabase.from('clientes').select('id').eq('status', 'cancelado').gte('criado_em', inicio),
-        supabase.from('clientes').select('telas_apps').eq('status', 'ativo'),
+        supabase.from('clientes').select('aplicativo, telas_apps').eq('status', 'ativo'),
       ]);
 
       const pagas = cobPagas.data ?? [];
@@ -57,7 +57,10 @@ export default function RelatoriosPage() {
         porCategoria[d.categoria] = (porCategoria[d.categoria] ?? 0) + Number(d.valor);
       }
 
-      const todasTelas = (telas.data ?? []).flatMap((c: any) => (c.telas_apps as string[]) ?? []);
+      // O dispositivo/app principal do cliente já conta como a 1ª tela dele
+      const todasTelas = (telas.data ?? []).flatMap((c: any) =>
+        [c.aplicativo, ...((c.telas_apps as string[]) ?? [])].filter(Boolean)
+      );
 
       setResumo({
         receitaClientes: pagas.filter((c) => c.tipo === 'cliente').reduce((s, c) => s + Number(c.valor), 0),
