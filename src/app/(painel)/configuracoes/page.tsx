@@ -410,16 +410,22 @@ export default function ConfiguracoesPage() {
               </div>
               <Input label="Chave de API" type="password" value={ia.api_key} onChange={(e) => setIa({ ...ia, api_key: e.target.value })} />
               <TextArea
-                label="Prompt do sistema (personalidade e regras do agente)"
+                label="Prompt do sistema (personalidade extra do agente)"
                 value={ia.prompt_sistema}
                 onChange={(e) => setIa({ ...ia, prompt_sistema: e.target.value })}
-                rows={6}
+                rows={5}
+                hint="Opcional — use para ajustar tom/estilo. As regras de atendimento já vêm embutidas."
               />
-              <p className="text-xs text-slate-400">
-                Além do prompt, o agente recebe automaticamente a base de conhecimento com os apps compatíveis
-                por dispositivo e os passos de instalação (aba Suporte &gt; Guia de apps), já com os links padrão preenchidos.
-                Quando você assume uma conversa no Suporte, a IA para de responder aquele contato.
-              </p>
+              <div className="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 space-y-1">
+                <p className="font-medium text-slate-600">O agente já faz isto automaticamente:</p>
+                <ul className="list-disc pl-4 space-y-0.5 text-slate-500">
+                  <li>Identifica o cliente pelo número de WhatsApp e usa o dispositivo/apps do cadastro dele.</li>
+                  <li>Pergunta o problema e orienta a instalação usando a base de conhecimento (Suporte &gt; Guia de apps).</li>
+                  <li>Atualiza o aparelho/app do cliente no cadastro quando ele troca de aparelho.</li>
+                  <li>Transfere para um humano quando não resolve ou o assunto é financeiro — a conversa aparece como <b>Aguardando</b> na aba Suporte.</li>
+                </ul>
+                <p className="text-slate-400">Quando você assume uma conversa no Suporte, a IA para de responder aquele contato.</p>
+              </div>
             </div>
           </Card>
           <Btn onClick={() => salvarSetting('agente_ia', ia)} disabled={salvando}>Salvar agente de IA</Btn>

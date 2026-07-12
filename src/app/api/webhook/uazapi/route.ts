@@ -3,7 +3,7 @@ import { createAdminClient } from '@/lib/supabase/server';
 import { getSetting } from '@/lib/settings';
 import { gerarRespostaIA, type MensagemIA } from '@/lib/ia';
 import { sendText } from '@/lib/uazapi';
-import type { AgenteIAConfig, UazapiConfig } from '@/types';
+import type { AgenteIAConfig, Cliente, UazapiConfig } from '@/types';
 
 // Webhook de mensagens recebidas da Uazapi.
 // Configure em Configurações > WhatsApp > "Configurar webhook".
@@ -19,6 +19,19 @@ function extrairMensagem(body: any) {
   const grupo = typeof chatid === 'string' && chatid.includes('@g.us');
   const telefone = String(chatid).replace(/@.*$/, '').replace(/\D/g, '');
   return { telefone, texto: String(texto || ''), nome, fromMe, grupo };
+}
+
+// Localiza o cliente pelo WhatsApp. Compara pelos últimos 8 dígitos para ser tolerante a
+// diferenças de DDI/nono dígito entre o número salvo e o que chega no webhook.
+async function localizarCliente(admin: ReturnType<typeof createAdminClient>, telefone: string): Promise<Cliente | null> {
+  if (telefone.length < 8) return null;
+  const sufixo = telefone.slice(-8);
+  const { data } = await admin
+    .from('clientes')
+    .select('*, planos(*)')
+    .ilike('telefone', `%${sufixo}`)
+    .limit(1);
+  return ((data as Cliente[]) ?? [])[0] ?? null;
 }
 
 export async function POST(req: NextRequest) {
@@ -37,6 +50,7 @@ export async function POST(req: NextRequest) {
     }
 
     const admin = createAdminClient();
+    const cliente = await localizarCliente(admin, telefone);
 
     // Encontra ou cria a conversa
     let { data: conversa } = await admin
@@ -48,11 +62,24 @@ export async function POST(req: NextRequest) {
     if (!conversa) {
       const { data: nova, error } = await admin
         .from('conversas')
-        .insert({ telefone, nome: nome || null, modo: 'ia' })
+        .insert({
+          telefone,
+          nome: cliente?.nome || nome || null,
+          cliente_id: cliente?.id ?? null,
+          modo: 'ia',
+          status: 'ia',
+        })
         .select()
         .single();
       if (error) throw new Error(error.message);
       conversa = nova;
+    } else if (cliente && conversa.cliente_id !== cliente.id) {
+      // Vincula o cliente a uma conversa antiga (cadastro feito depois do 1º contato)
+      await admin
+        .from('conversas')
+        .update({ cliente_id: cliente.id, nome: conversa.nome || cliente.nome })
+        .eq('id', conversa.id);
+      conversa.cliente_id = cliente.id;
     }
 
     await admin.from('mensagens').insert({
@@ -62,11 +89,18 @@ export async function POST(req: NextRequest) {
       conteudo: texto,
     });
 
+    // Reabre conversas encerradas quando o cliente volta a escrever
+    const reabrindo = conversa.status === 'resolvida';
+    const modoAtual = reabrindo ? 'ia' : conversa.modo;
+    const statusAtual = reabrindo ? 'ia' : conversa.status;
+
     await admin
       .from('conversas')
       .update({
         ultima_mensagem: texto.slice(0, 200),
-        nome: conversa.nome || nome || null,
+        nome: conversa.nome || cliente?.nome || nome || null,
+        modo: modoAtual,
+        status: statusAtual,
         nao_lidas: (conversa.nao_lidas ?? 0) + 1,
         atualizado_em: new Date().toISOString(),
       })
@@ -74,7 +108,7 @@ export async function POST(req: NextRequest) {
 
     // Resposta automática da IA (somente se a conversa estiver no modo IA)
     const agente = await getSetting<AgenteIAConfig>('agente_ia');
-    if (agente?.habilitado && agente.auto_resposta && conversa.modo === 'ia') {
+    if (agente?.habilitado && agente.auto_resposta && modoAtual === 'ia') {
       const { data: ultimas } = await admin
         .from('mensagens')
         .select('direcao, conteudo')
@@ -90,21 +124,38 @@ export async function POST(req: NextRequest) {
         }));
 
       try {
-        const resposta = await gerarRespostaIA(historico);
-        if (resposta) {
+        const resultado = await gerarRespostaIA(historico, cliente);
+
+        if (resultado.resposta) {
           const uazapi = await getSetting<UazapiConfig>('uazapi');
           if (uazapi?.server_url && uazapi.instance_token) {
-            await sendText(uazapi, telefone, resposta);
+            await sendText(uazapi, telefone, resultado.resposta);
           }
           await admin.from('mensagens').insert({
             conversa_id: conversa.id,
             direcao: 'saida',
             autor: 'ia',
-            conteudo: resposta,
+            conteudo: resultado.resposta,
           });
+        }
+
+        // A IA pediu transferência para um humano — marca a conversa para o CRM.
+        if (resultado.escalar) {
           await admin
             .from('conversas')
-            .update({ ultima_mensagem: resposta.slice(0, 200), atualizado_em: new Date().toISOString() })
+            .update({
+              modo: 'humano',
+              status: 'aguardando',
+              motivo_escalacao: resultado.escalar.motivo,
+              ultima_mensagem: (resultado.resposta ?? texto).slice(0, 200),
+              nao_lidas: (conversa.nao_lidas ?? 0) + 1,
+              atualizado_em: new Date().toISOString(),
+            })
+            .eq('id', conversa.id);
+        } else if (resultado.resposta) {
+          await admin
+            .from('conversas')
+            .update({ ultima_mensagem: resultado.resposta.slice(0, 200), atualizado_em: new Date().toISOString() })
             .eq('id', conversa.id);
         }
       } catch (e) {

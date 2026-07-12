@@ -151,12 +151,26 @@ create table if not exists public.conversas (
   id uuid primary key default gen_random_uuid(),
   telefone text not null unique,
   nome text,
+  -- vínculo com o cliente cadastrado (identificado pelo WhatsApp) — usado pelo agente de IA e pelo CRM
+  cliente_id uuid references public.clientes(id) on delete set null,
   ultima_mensagem text,
   modo text not null default 'ia' check (modo in ('ia','humano')),
+  -- pipeline de CRM do suporte:
+  --   ia         = agente de IA atendendo
+  --   aguardando = IA não resolveu / cliente pediu humano — precisa de atendente
+  --   humano     = atendente humano assumiu
+  --   resolvida  = atendimento encerrado
+  status text not null default 'ia',
+  -- resumo do motivo quando a IA transfere para um humano
+  motivo_escalacao text,
   nao_lidas int not null default 0,
   atualizado_em timestamptz not null default now(),
   criado_em timestamptz not null default now()
 );
+-- Migração para bancos já existentes
+alter table public.conversas add column if not exists cliente_id uuid references public.clientes(id) on delete set null;
+alter table public.conversas add column if not exists status text not null default 'ia';
+alter table public.conversas add column if not exists motivo_escalacao text;
 
 create table if not exists public.mensagens (
   id uuid primary key default gen_random_uuid(),
@@ -238,12 +252,7 @@ insert into public.settings (chave, valor) values
     "server_url": "",
     "admin_token": "",
     "instance_token": "",
-    "instance_name": "sistema",
-    "proxy_host": "",
-    "proxy_porta": "",
-    "proxy_usuario": "",
-    "proxy_senha": "",
-    "proxy_cidade": ""
+    "instance_name": "sistema"
   }'::jsonb),
   ('pagamentos', '{
     "chave_pix": "",
@@ -264,7 +273,7 @@ insert into public.settings (chave, valor) values
     "api_key": "",
     "model": "claude-haiku-4-5-20251001",
     "auto_resposta": true,
-    "prompt_sistema": "Você é o atendente virtual de um serviço de TV por assinatura. Seja educado, objetivo e responda em português do Brasil. Ajude o cliente a instalar o aplicativo correto para o dispositivo dele usando a base de conhecimento fornecida. Nunca invente informações: se não souber, diga que vai transferir para um atendente humano. Não informe usuário e senha de clientes."
+    "prompt_sistema": "Você é o atendente virtual da TvAlfenas, um serviço de TV por assinatura (IPTV). Fale como um atendente humano simpático: mensagens curtas, calorosas e diretas, em português do Brasil, com no máximo 1 ou 2 emojis por mensagem."
   }'::jsonb),
   ('comissao_padrao', '{"tipo": "fixo", "valor": 10.00}'::jsonb),
   ('revenda_padrao', '{"valor_por_acesso": 15.00}'::jsonb),

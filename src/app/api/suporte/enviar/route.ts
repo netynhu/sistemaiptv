@@ -40,9 +40,16 @@ export async function POST(req: NextRequest) {
       autor: 'humano',
       conteudo: texto.trim(),
     });
+    // Ao responder manualmente, o atendente assume a conversa (a IA para de responder).
     await admin
       .from('conversas')
-      .update({ ultima_mensagem: texto.trim().slice(0, 200), atualizado_em: new Date().toISOString() })
+      .update({
+        ultima_mensagem: texto.trim().slice(0, 200),
+        modo: 'humano',
+        status: conversa.status === 'resolvida' ? 'resolvida' : 'humano',
+        nao_lidas: 0,
+        atualizado_em: new Date().toISOString(),
+      })
       .eq('id', conversa_id);
 
     return NextResponse.json({ ok: true });

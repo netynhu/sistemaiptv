@@ -87,14 +87,20 @@ export type Despesa = {
   clientes?: Pick<Cliente, 'nome' | 'usuario'> | null;
 };
 
+export type ConversaStatus = 'ia' | 'aguardando' | 'humano' | 'resolvida';
+
 export type Conversa = {
   id: string;
   telefone: string;
   nome: string | null;
+  cliente_id: string | null;
   ultima_mensagem: string | null;
   modo: 'ia' | 'humano';
+  status: ConversaStatus;
+  motivo_escalacao: string | null;
   nao_lidas: number;
   atualizado_em: string;
+  clientes?: Cliente | null;
 };
 
 export type Mensagem = {
