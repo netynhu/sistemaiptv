@@ -93,10 +93,18 @@ create table if not exists public.cobrancas (
   pago_em date,
   forma_pagamento text, -- pix, mercadopago, asaas, picpay, dinheiro...
   whatsapp_enviado_em timestamptz,
+  -- cobrança PIX gerada de verdade no Asaas/Mercado Pago (para dar baixa automática via webhook)
+  externo_provedor text check (externo_provedor in ('asaas','mercadopago')),
+  externo_id text,
+  pix_copia_cola text,
   criado_em timestamptz not null default now()
 );
 create index if not exists idx_cobrancas_status on public.cobrancas(status);
 create index if not exists idx_cobrancas_vencimento on public.cobrancas(vencimento);
+create index if not exists idx_cobrancas_externo on public.cobrancas(externo_provedor, externo_id);
+alter table public.cobrancas add column if not exists externo_provedor text check (externo_provedor in ('asaas','mercadopago'));
+alter table public.cobrancas add column if not exists externo_id text;
+alter table public.cobrancas add column if not exists pix_copia_cola text;
 
 -- ------------------------------------------------------------
 -- COMISSÕES (para indicadores)
@@ -238,9 +246,16 @@ insert into public.settings (chave, valor) values
   }'::jsonb),
   ('pagamentos', '{
     "chave_pix": "",
+    "chave_pix_tipo": "aleatoria",
+    "forma_pagamento_padrao": "PIX",
     "mercadopago_token": "",
+    "mercadopago_webhook_secret": "",
     "asaas_token": "",
+    "asaas_webhook_token": "",
     "picpay_token": ""
+  }'::jsonb),
+  ('avisos', '{
+    "grupo_whatsapp_id": ""
   }'::jsonb),
   ('agente_ia', '{
     "habilitado": false,
@@ -253,8 +268,9 @@ insert into public.settings (chave, valor) values
   ('comissao_padrao', '{"tipo": "fixo", "valor": 10.00}'::jsonb),
   ('revenda_padrao', '{"valor_por_acesso": 15.00}'::jsonb),
   ('mensagens', '{
-    "cobranca": "Olá {nome}! 👋\n\nSua assinatura vence em {vencimento}.\nValor: {valor}\n\nPara renovar, faça o pagamento via PIX:\n{pix}\n\nApós o pagamento, envie o comprovante aqui. Obrigado! 😊",
-    "boas_vindas": "Olá {nome}! Seja bem-vindo(a)! 🎉 Seu acesso já está ativo. Qualquer dúvida sobre a instalação, é só chamar aqui!"
+    "cobranca": "Olá {nome}! 👋😊\n\n📺 Sua assinatura vence em *{vencimento}*.\n💰 Valor: *{valor}*\n\n✅ Para renovar, é só pagar o PIX abaixo (toque para copiar):\n{pix}\n\n📩 Depois do pagamento, envie o comprovante aqui que já renovamos seu acesso! 🚀",
+    "atraso": "Olá {nome}! ⚠️\n\n📺 Sua assinatura venceu em *{vencimento}* e o pagamento ainda não caiu por aqui.\n💰 Valor: *{valor}*\n\n✅ Para evitar que seu acesso seja suspenso, faça o PIX abaixo (toque para copiar):\n{pix}\n\n📩 Já pagou? Manda o comprovante aqui que a gente confirma rapidinho! 🙏",
+    "boas_vindas": "Olá {nome}! Seja bem-vindo(a)! 🎉📺 Seu acesso já está ativo. Qualquer dúvida sobre a instalação, é só chamar aqui! 😊"
   }'::jsonb)
 on conflict (chave) do nothing;
 

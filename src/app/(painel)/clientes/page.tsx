@@ -9,7 +9,6 @@ import { addMeses, diasAte, fmtData, fmtMoeda, fmtTelefone, hojeISO, normalizarT
 import type { Cliente, Dispositivo, LinksPadrao, Plano, Revendedor } from '@/types';
 import { Copy, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 
-const CUSTO_POR_TELA = 1.5;
 const APP_ASSIST_PLUS = 'Assist Plus';
 
 const FORM_VAZIO = {
@@ -32,6 +31,7 @@ export default function ClientesPage() {
   const [salvando, setSalvando] = useState(false);
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [form, setForm] = useState({ ...FORM_VAZIO });
+  const [custoPorTela, setCustoPorTela] = useState(1.5);
 
   const appsDisponiveis = useMemo(
     () => Array.from(new Set(dispositivos.flatMap((d) => d.apps))).sort(),
@@ -40,19 +40,21 @@ export default function ClientesPage() {
 
   async function carregar() {
     setCarregando(true);
-    const [cli, pla, rev, disp, cfg] = await Promise.all([
+    const [cli, pla, rev, disp, cfg, telasCfg] = await Promise.all([
       supabase.from('clientes').select('*, planos(*), revendedores(*)').order('nome'),
       supabase.from('planos').select('*').eq('ativo', true).order('meses'),
       // Só indicadores ficam vinculados aqui — revendedor master tem painel próprio
       supabase.from('revendedores').select('*').eq('ativo', true).eq('tipo', 'indicacao').order('nome'),
       supabase.from('dispositivos').select('*').order('ordem'),
       supabase.from('settings').select('valor').eq('chave', 'links_padrao').maybeSingle(),
+      supabase.from('settings').select('valor').eq('chave', 'telas_config').maybeSingle(),
     ]);
     setClientes((cli.data as Cliente[]) ?? []);
     setPlanos((pla.data as Plano[]) ?? []);
     setRevendedores((rev.data as Revendedor[]) ?? []);
     setDispositivos((disp.data as Dispositivo[]) ?? []);
     setLinks((cfg.data?.valor as LinksPadrao) ?? null);
+    if (telasCfg.data?.valor?.custo_por_tela) setCustoPorTela(Number(telasCfg.data.valor.custo_por_tela));
     setCarregando(false);
   }
 
@@ -117,7 +119,7 @@ export default function ClientesPage() {
       .maybeSingle();
 
     if (qtd > 0) {
-      const valor = Math.round(qtd * CUSTO_POR_TELA * 100) / 100;
+      const valor = Math.round(qtd * custoPorTela * 100) / 100;
       const descricao = `Assist Plus — ${nomeCliente} (${qtd} tela${qtd > 1 ? 's' : ''})`;
       if (existente) {
         await supabase.from('despesas').update({ descricao, valor }).eq('id', existente.id);
@@ -483,9 +485,9 @@ export default function ClientesPage() {
               </Btn>
             </div>
             <p className="text-[11px] text-slate-400 mt-1">
-              Cada tela custa {fmtMoeda(CUSTO_POR_TELA)} (informativo, aparece só no relatório). Telas com{' '}
+              Cada tela custa {fmtMoeda(custoPorTela)} (informativo, aparece só no relatório). Telas com{' '}
               <b>Assist Plus</b> (incluindo se for o app principal) geram automaticamente uma despesa de{' '}
-              {fmtMoeda(CUSTO_POR_TELA)} cada em Financeiro &gt; Despesas.
+              {fmtMoeda(custoPorTela)} cada em Financeiro &gt; Despesas.
             </p>
           </div>
 

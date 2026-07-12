@@ -1,0 +1,100 @@
+{
+  "name": "Sistema Alfenas — Cobrança diária",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 10 * * *"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-400, 0],
+      "id": "trigger-10h",
+      "name": "Todo dia às 10h"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://SEU-DOMINIO.vercel.app/api/automacao/cobranca-diaria",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-automacao-secret",
+              "value": "={{ $vars.AUTOMACAO_SECRET }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-160, 0],
+      "id": "chamar-automacao",
+      "name": "Chamar /api/automacao/cobranca-diaria"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.falhasEnvio.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [80, 0],
+      "id": "teve-falha",
+      "name": "Teve falha no envio?"
+    }
+  ],
+  "connections": {
+    "Todo dia às 10h": {
+      "main": [
+        [
+          {
+            "node": "Chamar /api/automacao/cobranca-diaria",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chamar /api/automacao/cobranca-diaria": {
+      "main": [
+        [
+          {
+            "node": "Teve falha no envio?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

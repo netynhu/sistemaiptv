@@ -6,8 +6,6 @@ import { Btn, Card, Carregando, PageTitle, Vazio } from '@/components/ui';
 import { fmtMoeda, mesAtualISO, nomeMes } from '@/lib/utils';
 import { Printer } from 'lucide-react';
 
-const CUSTO_POR_TELA = 1.5;
-
 type Resumo = {
   receitaClientes: number;
   receitaRevendas: number;
@@ -26,6 +24,7 @@ export default function RelatoriosPage() {
   const [mes, setMes] = useState(mesAtualISO());
   const [resumo, setResumo] = useState<Resumo | null>(null);
   const [carregando, setCarregando] = useState(true);
+  const [custoPorTela, setCustoPorTela] = useState(1.5);
 
   useEffect(() => {
     (async () => {
@@ -35,14 +34,16 @@ export default function RelatoriosPage() {
       const fim = new Date(y, m, 0).toISOString().slice(0, 10);
       const fimTs = `${fim}T23:59:59`;
 
-      const [cobPagas, desp, comGeradas, novos, cancelados, telas] = await Promise.all([
+      const [cobPagas, desp, comGeradas, novos, cancelados, telas, telasCfg] = await Promise.all([
         supabase.from('cobrancas').select('valor, tipo, forma_pagamento').eq('status', 'pago').gte('pago_em', inicio).lte('pago_em', fim),
         supabase.from('despesas').select('valor, categoria').gte('data', inicio).lte('data', fim),
         supabase.from('comissoes').select('valor').gte('criado_em', inicio).lte('criado_em', fimTs),
         supabase.from('clientes').select('id').gte('data_ativacao', inicio).lte('data_ativacao', fim),
         supabase.from('clientes').select('id').eq('status', 'cancelado').gte('criado_em', inicio),
         supabase.from('clientes').select('aplicativo, telas_apps').eq('status', 'ativo'),
+        supabase.from('settings').select('valor').eq('chave', 'telas_config').maybeSingle(),
       ]);
+      if (telasCfg.data?.valor?.custo_por_tela) setCustoPorTela(Number(telasCfg.data.valor.custo_por_tela));
 
       const pagas = cobPagas.data ?? [];
       const porForma: Record<string, number> = {};
@@ -201,12 +202,12 @@ export default function RelatoriosPage() {
               <div className="text-xl font-bold text-slate-900">{resumo.totalTelas}</div>
             </div>
             <div>
-              <div className="text-slate-500 text-[11px]">Custo estimado ({fmtMoeda(CUSTO_POR_TELA)}/tela)</div>
-              <div className="text-xl font-bold text-slate-900">{fmtMoeda(resumo.totalTelas * CUSTO_POR_TELA)}</div>
+              <div className="text-slate-500 text-[11px]">Custo estimado ({fmtMoeda(custoPorTela)}/tela)</div>
+              <div className="text-xl font-bold text-slate-900">{fmtMoeda(resumo.totalTelas * custoPorTela)}</div>
             </div>
             <div>
               <div className="text-slate-500 text-[11px]">Das quais Assist Plus ({resumo.telasAssistPlus} tela{resumo.telasAssistPlus === 1 ? '' : 's'})</div>
-              <div className="text-xl font-bold text-slate-900">{fmtMoeda(resumo.telasAssistPlus * CUSTO_POR_TELA)}</div>
+              <div className="text-xl font-bold text-slate-900">{fmtMoeda(resumo.telasAssistPlus * custoPorTela)}</div>
             </div>
           </div>
           <p className="text-[11px] text-slate-400 mt-3">

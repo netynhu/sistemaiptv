@@ -6,8 +6,8 @@ import {
   Btn, Badge, Card, Carregando, Input, Modal, PageTitle, Select, Tabela, Td, Th, toast, Vazio,
 } from '@/components/ui';
 import { addMeses, diasAte, fmtData, fmtMoeda, hojeISO, mesAtualISO, nomeComUsuario } from '@/lib/utils';
-import type { Cobranca } from '@/types';
-import { CheckCircle2, MessageCircle, Search, Store, Users, XCircle } from 'lucide-react';
+import type { Cobranca, PagamentosConfig } from '@/types';
+import { CheckCircle2, Copy, CreditCard, MessageCircle, Search, Store, Users, XCircle } from 'lucide-react';
 
 type Aba = 'pendentes' | 'pagas' | 'todas';
 
@@ -19,6 +19,10 @@ export default function ReceitasPage() {
   const [enviandoId, setEnviandoId] = useState<string | null>(null);
   const [mes, setMes] = useState('');
   const [busca, setBusca] = useState('');
+  const [formaPadrao, setFormaPadrao] = useState('PIX');
+  const [pagamentosCfg, setPagamentosCfg] = useState<PagamentosConfig | null>(null);
+  const [gerandoGateway, setGerandoGateway] = useState<string | null>(null);
+  const [verPix, setVerPix] = useState<Cobranca | null>(null);
 
   // modal de pagamento
   const [pagando, setPagando] = useState<Cobranca | null>(null);
@@ -98,12 +102,18 @@ export default function ReceitasPage() {
 
   useEffect(() => {
     carregar();
+    (async () => {
+      const { data } = await supabase.from('settings').select('valor').eq('chave', 'pagamentos').maybeSingle();
+      const cfg = data?.valor as PagamentosConfig | undefined;
+      if (cfg?.forma_pagamento_padrao) setFormaPadrao(cfg.forma_pagamento_padrao);
+      if (cfg) setPagamentosCfg(cfg);
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function abrirPagamento(c: Cobranca) {
     setPagando(c);
-    setFormaPg('PIX');
+    setFormaPg(formaPadrao);
     setDataPg(hojeISO());
     setRenovar(c.tipo === 'cliente');
   }
@@ -191,6 +201,31 @@ export default function ReceitasPage() {
     } finally {
       setEnviandoId(null);
     }
+  }
+
+  async function gerarGateway(c: Cobranca, provedor: 'asaas' | 'mercadopago') {
+    setGerandoGateway(c.id);
+    try {
+      const res = await fetch(`/api/pagamento/${provedor}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cobranca_id: c.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Falha ao gerar cobrança');
+      toast('Cobrança PIX gerada — quando o cliente pagar, o sistema dá baixa sozinho.');
+      await carregar();
+    } catch (e: any) {
+      toast(`Erro: ${e.message}`, 'erro');
+    } finally {
+      setGerandoGateway(null);
+    }
+  }
+
+  function copiarPixCobranca(c: Cobranca) {
+    if (!c.pix_copia_cola) return;
+    navigator.clipboard.writeText(c.pix_copia_cola);
+    toast('Código PIX copiado.');
   }
 
   const visiveis = cobrancas.filter((c) => {
@@ -353,7 +388,39 @@ export default function ReceitasPage() {
                   </Td>
                   <Td className="text-right whitespace-nowrap">
                     {c.status === 'pendente' && (
-                      <span className="inline-flex gap-1.5">
+                      <span className="inline-flex items-center gap-1.5">
+                        {c.pix_copia_cola ? (
+                          <button
+                            onClick={() => setVerPix(c)}
+                            className="p-1.5 text-slate-400 hover:text-indigo-600"
+                            title={`Ver/copiar PIX gerado (${c.externo_provedor === 'asaas' ? 'Asaas' : 'Mercado Pago'})`}
+                          >
+                            <CreditCard size={16} />
+                          </button>
+                        ) : (
+                          <>
+                            {pagamentosCfg?.asaas_token && (
+                              <button
+                                onClick={() => gerarGateway(c, 'asaas')}
+                                disabled={gerandoGateway === c.id}
+                                className="text-[11px] px-2 py-1 rounded border border-slate-300 text-slate-600 hover:bg-slate-50"
+                                title="Gerar cobrança PIX real no Asaas"
+                              >
+                                {gerandoGateway === c.id ? '…' : 'Asaas'}
+                              </button>
+                            )}
+                            {pagamentosCfg?.mercadopago_token && (
+                              <button
+                                onClick={() => gerarGateway(c, 'mercadopago')}
+                                disabled={gerandoGateway === c.id}
+                                className="text-[11px] px-2 py-1 rounded border border-slate-300 text-slate-600 hover:bg-slate-50"
+                                title="Gerar cobrança PIX real no Mercado Pago"
+                              >
+                                {gerandoGateway === c.id ? '…' : 'MP'}
+                              </button>
+                            )}
+                          </>
+                        )}
                         <Btn
                           size="sm"
                           variant="secondary"
@@ -423,6 +490,38 @@ export default function ReceitasPage() {
                 Renovar vencimento e já lançar a próxima receita
               </label>
             )}
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={!!verPix}
+        onClose={() => setVerPix(null)}
+        title="Cobrança PIX gerada"
+      >
+        {verPix && (
+          <div className="space-y-3 text-sm">
+            <Card>
+              <div className="font-medium text-slate-800">{nomeDestino(verPix)}</div>
+              <div className="text-slate-500">{verPix.descricao}</div>
+              <div className="text-lg font-bold mt-1">{fmtMoeda(verPix.valor)}</div>
+              <Badge cor="roxo">{verPix.externo_provedor === 'asaas' ? 'Asaas' : 'Mercado Pago'}</Badge>
+            </Card>
+            <div>
+              <span className="block text-xs font-medium text-slate-600 mb-1">Código PIX (copia e cola)</span>
+              <div className="flex gap-2">
+                <div className="flex-1 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs break-all">
+                  {verPix.pix_copia_cola}
+                </div>
+                <Btn size="sm" variant="secondary" onClick={() => copiarPixCobranca(verPix)}>
+                  <Copy size={14} /> Copiar
+                </Btn>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-2">
+                Quando o cliente pagar este PIX, o {verPix.externo_provedor === 'asaas' ? 'Asaas' : 'Mercado Pago'}{' '}
+                avisa o sistema e a cobrança é dada como paga automaticamente — sem precisar clicar em nada aqui.
+              </p>
+            </div>
           </div>
         )}
       </Modal>

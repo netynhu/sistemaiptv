@@ -18,6 +18,7 @@ import {
   Tv,
   X,
   ChevronDown,
+  Target,
 } from 'lucide-react';
 
 type ItemMenu = { href: string; label: string };
@@ -43,6 +44,13 @@ const MENU: EntradaMenu[] = [
     children: [
       { href: '/financeiro/receitas', label: 'Receitas' },
       { href: '/financeiro/despesas', label: 'Despesas' },
+    ],
+  },
+  {
+    label: 'Plano de vendas', icon: Target,
+    children: [
+      { href: '/plano-vendas/calculadora', label: 'Calculadora de meta' },
+      { href: '/plano-vendas/regras', label: 'Regras e planos' },
     ],
   },
   { href: '/relatorios', label: 'Relatórios', icon: BarChart3 },

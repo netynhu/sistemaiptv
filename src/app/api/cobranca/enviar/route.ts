@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { getSetting } from '@/lib/settings';
-import { sendText } from '@/lib/uazapi';
-import { aplicarTemplate, fmtData, fmtMoeda } from '@/lib/utils';
-import type { PagamentosConfig, UazapiConfig } from '@/types';
+import { enviarCobrancaWhatsApp } from '@/lib/cobranca';
+import type { Cobranca, PagamentosConfig, UazapiConfig } from '@/types';
 
 export async function POST(req: NextRequest) {
   try {
@@ -23,18 +22,9 @@ export async function POST(req: NextRequest) {
       .single();
     if (error || !cobranca) return NextResponse.json({ error: 'Cobrança não encontrada' }, { status: 404 });
 
-    const destinatario = cobranca.tipo === 'cliente' ? cobranca.clientes : cobranca.revendedores;
-    const telefone = destinatario?.telefone;
-    if (!telefone) {
-      return NextResponse.json(
-        { error: 'O destinatário não tem WhatsApp cadastrado.' },
-        { status: 400 }
-      );
-    }
-
     const [uazapi, mensagens, pagamentos] = await Promise.all([
       getSetting<UazapiConfig>('uazapi'),
-      getSetting<{ cobranca: string }>('mensagens'),
+      getSetting<{ cobranca: string; atraso: string; boas_vindas: string }>('mensagens'),
       getSetting<PagamentosConfig>('pagamentos'),
     ]);
     if (!uazapi?.server_url || !uazapi?.instance_token) {
@@ -44,24 +34,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const template =
-      mensagens?.cobranca ||
-      'Olá {nome}! Sua assinatura vence em {vencimento}. Valor: {valor}. PIX: {pix}';
-
-    const texto = aplicarTemplate(template, {
-      nome: destinatario.nome ?? '',
-      valor: fmtMoeda(Number(cobranca.valor)),
-      vencimento: fmtData(cobranca.vencimento),
-      descricao: cobranca.descricao ?? '',
-      pix: pagamentos?.chave_pix || '(chave PIX não configurada)',
-    });
-
-    await sendText(uazapi, telefone, texto);
-
-    await admin
-      .from('cobrancas')
-      .update({ whatsapp_enviado_em: new Date().toISOString() })
-      .eq('id', cobranca_id);
+    const resultado = await enviarCobrancaWhatsApp(cobranca as Cobranca, uazapi, mensagens, pagamentos);
+    if (!resultado.ok) return NextResponse.json({ error: resultado.erro }, { status: 400 });
 
     return NextResponse.json({ ok: true });
   } catch (e: any) {

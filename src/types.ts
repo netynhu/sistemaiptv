@@ -54,6 +54,9 @@ export type Cobranca = {
   pago_em: string | null;
   forma_pagamento: string | null;
   whatsapp_enviado_em: string | null;
+  externo_provedor: 'asaas' | 'mercadopago' | null;
+  externo_id: string | null;
+  pix_copia_cola: string | null;
   clientes?: Cliente | null;
   revendedores?: Revendedor | null;
 };
@@ -139,9 +142,17 @@ export type UazapiConfig = {
 
 export type PagamentosConfig = {
   chave_pix: string;
+  chave_pix_tipo: 'cpf' | 'cnpj' | 'email' | 'telefone' | 'aleatoria';
+  forma_pagamento_padrao: string;
   mercadopago_token: string;
+  mercadopago_webhook_secret: string;
   asaas_token: string;
+  asaas_webhook_token: string;
   picpay_token: string;
+};
+
+export type AvisosConfig = {
+  grupo_whatsapp_id: string;
 };
 
 export type AgenteIAConfig = {

@@ -103,6 +103,33 @@ export async function sendText(cfg: UazapiConfig, number: string, text: string) 
   return uaz(cfg, '/send/text', { auth: 'instance', body: { number, text } });
 }
 
+// Envia mensagem de texto com um botão de "copiar código PIX" (endpoint /send/pix-button
+// da Uazapi). A documentação pública dessa rota é limitada, então isso tenta o formato mais
+// comum e, se falhar por qualquer motivo, cai para uma mensagem de texto simples — a cobrança
+// nunca deixa de ser enviada por causa disso.
+export async function sendPixButton(
+  cfg: UazapiConfig,
+  number: string,
+  text: string,
+  pixCode: string,
+  pixButtonText = 'Copiar código PIX'
+) {
+  try {
+    return await uaz(cfg, '/send/pix-button', {
+      auth: 'instance',
+      body: { number, text, pixKey: pixCode, key: pixCode, buttonText: pixButtonText },
+    });
+  } catch {
+    // Endpoint indisponível/formato diferente no seu servidor — garante que a mensagem chegue.
+    return sendText(cfg, number, text);
+  }
+}
+
+// Envia mensagem de texto para um grupo (o id de grupo termina em @g.us)
+export async function sendGroupText(cfg: UazapiConfig, groupId: string, text: string) {
+  return uaz(cfg, '/send/text', { auth: 'instance', body: { number: groupId, text } });
+}
+
 // Extrai o QR code de respostas com formatos diferentes entre versões
 export function extrairQr(data: any): string | null {
   const qr = data?.instance?.qrcode || data?.qrcode || data?.qr || null;

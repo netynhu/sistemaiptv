@@ -6,11 +6,13 @@ import {
   Btn, Badge, Card, Carregando, Input, PageTitle, Select, TextArea, Toggle, toast,
 } from '@/components/ui';
 import type {
-  AgenteIAConfig, LinksPadrao, PagamentosConfig, Plano, UazapiConfig,
+  AgenteIAConfig, AvisosConfig, LinksPadrao, PagamentosConfig, Plano, UazapiConfig,
 } from '@/types';
-import { Bot, CreditCard, Link2, MessageSquareText, QrCode, Tags } from 'lucide-react';
+import { Bell, Bot, Copy, CreditCard, Link2, MessageSquareText, QrCode, Tags } from 'lucide-react';
 
-type Aba = 'planos' | 'links' | 'whatsapp' | 'pagamentos' | 'ia' | 'mensagens';
+type Aba = 'planos' | 'links' | 'whatsapp' | 'pagamentos' | 'ia' | 'mensagens' | 'avisos';
+
+const FORMAS_PAGAMENTO = ['PIX', 'Mercado Pago', 'Asaas', 'PicPay', 'Dinheiro', 'Outro'];
 
 const CIDADES = [
   'Alfenas', 'Belo Horizonte', 'São Paulo', 'Rio de Janeiro', 'Varginha', 'Poços de Caldas',
@@ -27,9 +29,15 @@ export default function ConfiguracoesPage() {
   const [planos, setPlanos] = useState<Plano[]>([]);
   const [links, setLinks] = useState<LinksPadrao>({ m3u: '', smarters_url: '', smarters_nome: '', xciptv_url: '', assist_plus_codigo: '' });
   const [uazapi, setUazapi] = useState<UazapiConfig>({ server_url: '', admin_token: '', instance_token: '', instance_name: 'sistema', proxy_host: '', proxy_porta: '', proxy_usuario: '', proxy_senha: '', proxy_cidade: '' });
-  const [pagamentos, setPagamentos] = useState<PagamentosConfig>({ chave_pix: '', mercadopago_token: '', asaas_token: '', picpay_token: '' });
+  const [pagamentos, setPagamentos] = useState<PagamentosConfig>({
+    chave_pix: '', chave_pix_tipo: 'aleatoria', forma_pagamento_padrao: 'PIX',
+    mercadopago_token: '', mercadopago_webhook_secret: '',
+    asaas_token: '', asaas_webhook_token: '', picpay_token: '',
+  });
+  const [avisos, setAvisos] = useState<AvisosConfig>({ grupo_whatsapp_id: '' });
+  const [telasConfig, setTelasConfig] = useState<{ custo_por_tela: string }>({ custo_por_tela: '1.5' });
   const [ia, setIa] = useState<AgenteIAConfig>({ habilitado: false, provider: 'anthropic', api_key: '', model: '', auto_resposta: true, prompt_sistema: '' });
-  const [mensagens, setMensagens] = useState<{ cobranca: string; boas_vindas: string }>({ cobranca: '', boas_vindas: '' });
+  const [mensagens, setMensagens] = useState<{ cobranca: string; atraso: string; boas_vindas: string }>({ cobranca: '', atraso: '', boas_vindas: '' });
   const [comissaoPadrao, setComissaoPadrao] = useState<{ tipo: string; valor: string }>({ tipo: 'fixo', valor: '' });
   const [revendaPadrao, setRevendaPadrao] = useState<{ valor_por_acesso: string }>({ valor_por_acesso: '' });
 
@@ -50,10 +58,12 @@ export default function ConfiguracoesPage() {
     if (mapa.links_padrao) setLinks({ ...links, ...mapa.links_padrao });
     if (mapa.uazapi) setUazapi((u) => ({ ...u, ...mapa.uazapi }));
     if (mapa.pagamentos) setPagamentos((p) => ({ ...p, ...mapa.pagamentos }));
+    if (mapa.avisos) setAvisos((a) => ({ ...a, ...mapa.avisos }));
     if (mapa.agente_ia) setIa((i) => ({ ...i, ...mapa.agente_ia }));
     if (mapa.mensagens) setMensagens((m) => ({ ...m, ...mapa.mensagens }));
     if (mapa.comissao_padrao) setComissaoPadrao({ tipo: mapa.comissao_padrao.tipo ?? 'fixo', valor: String(mapa.comissao_padrao.valor ?? '') });
     if (mapa.revenda_padrao) setRevendaPadrao({ valor_por_acesso: String(mapa.revenda_padrao.valor_por_acesso ?? '') });
+    if (mapa.telas_config) setTelasConfig({ custo_por_tela: String(mapa.telas_config.custo_por_tela ?? '1.5') });
     setCarregando(false);
   }
 
@@ -83,6 +93,7 @@ export default function ConfiguracoesPage() {
     }
     await salvarSetting('comissao_padrao', { tipo: comissaoPadrao.tipo, valor: parseFloat(comissaoPadrao.valor || '0') || 0 }, '');
     await salvarSetting('revenda_padrao', { valor_por_acesso: parseFloat(revendaPadrao.valor_por_acesso || '0') || 0 }, '');
+    await salvarSetting('telas_config', { custo_por_tela: parseFloat(telasConfig.custo_por_tela || '0') || 0 }, '');
     setSalvando(false);
     toast('Planos e padrões salvos.');
   }
@@ -132,7 +143,15 @@ export default function ConfiguracoesPage() {
     { k: 'pagamentos', label: 'Pagamentos', icon: CreditCard },
     { k: 'ia', label: 'Agente de IA', icon: Bot },
     { k: 'mensagens', label: 'Mensagens', icon: MessageSquareText },
+    { k: 'avisos', label: 'Avisos', icon: Bell },
   ];
+
+  const origem = typeof window !== 'undefined' ? window.location.origin : '';
+
+  function copiar(texto: string, msg = 'Copiado.') {
+    navigator.clipboard.writeText(texto);
+    toast(msg);
+  }
 
   return (
     <div>
@@ -207,6 +226,17 @@ export default function ConfiguracoesPage() {
                 hint="Sugerida ao cadastrar novo indicador"
               />
             </div>
+          </Card>
+
+          <Card title="Telas simultâneas">
+            <Input
+              label="Preço por tela adicional (R$)"
+              type="number" step="0.01"
+              value={telasConfig.custo_por_tela}
+              onChange={(e) => setTelasConfig({ custo_por_tela: e.target.value })}
+              hint="Usado no custo informativo de telas (Relatórios) e na despesa automática do Assist Plus por tela"
+              className="max-w-xs"
+            />
           </Card>
 
           <Btn onClick={salvarPlanos} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar planos e padrões'}</Btn>
@@ -316,17 +346,66 @@ export default function ConfiguracoesPage() {
       {/* ---------------- PAGAMENTOS ---------------- */}
       {aba === 'pagamentos' && (
         <div className="space-y-5 max-w-2xl">
-          <Card title="PIX e tokens dos gateways">
-            <div className="space-y-3">
-              <Input label="Chave PIX (usada nas mensagens de cobrança)" value={pagamentos.chave_pix} onChange={(e) => setPagamentos({ ...pagamentos, chave_pix: e.target.value })} />
-              <Input label="Token — Mercado Pago (Access Token)" type="password" value={pagamentos.mercadopago_token} onChange={(e) => setPagamentos({ ...pagamentos, mercadopago_token: e.target.value })} />
-              <Input label="Token — Asaas (API Key)" type="password" value={pagamentos.asaas_token} onChange={(e) => setPagamentos({ ...pagamentos, asaas_token: e.target.value })} />
-              <Input label="Token — PicPay Empresas" type="password" value={pagamentos.picpay_token} onChange={(e) => setPagamentos({ ...pagamentos, picpay_token: e.target.value })} hint="Disponível se sua conta PicPay Empresas tiver acesso à API de pagamentos" />
-              <p className="text-xs text-slate-400">
-                Os tokens ficam guardados para as integrações de cobrança automática. O envio de cobrança por WhatsApp usa a chave PIX acima.
-              </p>
+          <Card title="PIX">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Input label="Chave PIX (usada nas mensagens de cobrança)" className="sm:col-span-2" value={pagamentos.chave_pix} onChange={(e) => setPagamentos({ ...pagamentos, chave_pix: e.target.value })} />
+              <Select label="Tipo da chave" value={pagamentos.chave_pix_tipo} onChange={(e) => setPagamentos({ ...pagamentos, chave_pix_tipo: e.target.value as any })}>
+                <option value="aleatoria">Aleatória</option>
+                <option value="cpf">CPF</option>
+                <option value="cnpj">CNPJ</option>
+                <option value="email">E-mail</option>
+                <option value="telefone">Telefone</option>
+              </Select>
+              <Select label="Forma de pagamento padrão" value={pagamentos.forma_pagamento_padrao} onChange={(e) => setPagamentos({ ...pagamentos, forma_pagamento_padrao: e.target.value })} hint="Já vem selecionada ao registrar um pagamento em Receitas">
+                {FORMAS_PAGAMENTO.map((f) => (
+                  <option key={f} value={f}>{f}</option>
+                ))}
+              </Select>
             </div>
           </Card>
+
+          <Card title="Mercado Pago">
+            <div className="space-y-3">
+              <Input label="Access Token" type="password" value={pagamentos.mercadopago_token} onChange={(e) => setPagamentos({ ...pagamentos, mercadopago_token: e.target.value })} />
+              <Input label="Chave secreta do Webhook" type="password" value={pagamentos.mercadopago_webhook_secret} onChange={(e) => setPagamentos({ ...pagamentos, mercadopago_webhook_secret: e.target.value })} hint="Gerada ao configurar o webhook no painel do Mercado Pago — cole aqui o mesmo valor" />
+              {origem && (
+                <div>
+                  <span className="block text-xs font-medium text-slate-600 mb-1">URL do Webhook (cole no painel do Mercado Pago)</span>
+                  <div className="flex gap-2">
+                    <div className="flex-1 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs truncate">{origem}/api/webhook/mercadopago</div>
+                    <Btn size="sm" variant="secondary" onClick={() => copiar(`${origem}/api/webhook/mercadopago`)}><Copy size={14} /></Btn>
+                  </div>
+                </div>
+              )}
+            </div>
+          </Card>
+
+          <Card title="Asaas">
+            <div className="space-y-3">
+              <Input label="API Key" type="password" value={pagamentos.asaas_token} onChange={(e) => setPagamentos({ ...pagamentos, asaas_token: e.target.value })} />
+              <Input label="Token de autenticação do Webhook" type="password" value={pagamentos.asaas_webhook_token} onChange={(e) => setPagamentos({ ...pagamentos, asaas_webhook_token: e.target.value })} hint="Defina um valor aqui e cole o mesmo no campo 'Token de autenticação' ao criar o webhook no Asaas" />
+              {origem && (
+                <div>
+                  <span className="block text-xs font-medium text-slate-600 mb-1">URL do Webhook (cole no painel do Asaas)</span>
+                  <div className="flex gap-2">
+                    <div className="flex-1 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs truncate">{origem}/api/webhook/asaas</div>
+                    <Btn size="sm" variant="secondary" onClick={() => copiar(`${origem}/api/webhook/asaas`)}><Copy size={14} /></Btn>
+                  </div>
+                </div>
+              )}
+            </div>
+          </Card>
+
+          <Card title="PicPay">
+            <Input label="Token — PicPay Empresas" type="password" value={pagamentos.picpay_token} onChange={(e) => setPagamentos({ ...pagamentos, picpay_token: e.target.value })} hint="Disponível se sua conta PicPay Empresas tiver acesso à API de pagamentos" />
+          </Card>
+
+          <p className="text-xs text-slate-400">
+            Com o token e o webhook configurados, use o botão &quot;Gerar cobrança&quot; em Financeiro &gt; Receitas
+            para criar um PIX real no Asaas/Mercado Pago — quando o cliente pagar, a cobrança é dada como paga
+            automaticamente aqui no sistema.
+          </p>
+
           <Btn onClick={() => salvarSetting('pagamentos', pagamentos)} disabled={salvando}>Salvar pagamentos</Btn>
         </div>
       )}
@@ -376,10 +455,16 @@ export default function ConfiguracoesPage() {
           <Card title="Modelos de mensagem (WhatsApp)">
             <div className="space-y-3">
               <TextArea
-                label="Mensagem de cobrança"
+                label="Mensagem de cobrança (vence hoje)"
                 rows={7}
                 value={mensagens.cobranca}
                 onChange={(e) => setMensagens({ ...mensagens, cobranca: e.target.value })}
+              />
+              <TextArea
+                label="Mensagem de atraso (enviada automaticamente no dia seguinte ao vencimento)"
+                rows={7}
+                value={mensagens.atraso}
+                onChange={(e) => setMensagens({ ...mensagens, atraso: e.target.value })}
               />
               <TextArea
                 label="Mensagem de boas-vindas"
@@ -393,6 +478,29 @@ export default function ConfiguracoesPage() {
             </div>
           </Card>
           <Btn onClick={() => salvarSetting('mensagens', mensagens)} disabled={salvando}>Salvar mensagens</Btn>
+        </div>
+      )}
+
+      {/* ---------------- AVISOS ---------------- */}
+      {aba === 'avisos' && (
+        <div className="space-y-5 max-w-2xl">
+          <Card title="Grupo de WhatsApp para avisos aos administradores">
+            <div className="space-y-3">
+              <Input
+                label="ID do grupo"
+                placeholder="120363012345678901@g.us"
+                value={avisos.grupo_whatsapp_id}
+                onChange={(e) => setAvisos({ ...avisos, grupo_whatsapp_id: e.target.value })}
+                hint="O ID de um grupo do WhatsApp sempre termina em @g.us. Peça o ID do grupo ao suporte do seu servidor Uazapi, ou verifique no painel dele em Grupos."
+              />
+              <p className="text-xs text-slate-400">
+                Todo dia, junto com a rotina de cobrança automática (10h), o sistema envia um resumo dos
+                recebimentos do dia anterior para este grupo — assim os administradores acompanham sem precisar
+                abrir o painel.
+              </p>
+            </div>
+          </Card>
+          <Btn onClick={() => salvarSetting('avisos', avisos)} disabled={salvando}>Salvar avisos</Btn>
         </div>
       )}
     </div>
