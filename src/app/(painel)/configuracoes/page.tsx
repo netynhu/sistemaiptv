@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client';
 import {
   Btn, Badge, Card, Carregando, Input, PageTitle, Select, TextArea, Toggle, toast,
 } from '@/components/ui';
+import { hojeISO } from '@/lib/utils';
 import type { MensagensConfig } from '@/lib/cobranca';
 import type {
   AgenteIAConfig, AvisosConfig, LinksPadrao, PagamentosConfig, Plano, UazapiConfig,
@@ -80,6 +81,35 @@ export default function ConfiguracoesPage() {
     toast(msg);
   }
 
+  // Recalcula as despesas de Assist Plus de todos os clientes com o custo por tela atual.
+  // Sem isso, mudar o custo por tela deixaria as despesas antigas com o valor velho
+  // (ex.: despesa de R$20 criada quando o custo era R$10, mesmo depois de baixar para R$1,50).
+  async function resincronizarDespesasAssistPlus(custo: number) {
+    const [{ data: clientes }, { data: existentes }] = await Promise.all([
+      supabase.from('clientes').select('id, nome, aplicativo, telas_apps').eq('status', 'ativo'),
+      supabase.from('despesas').select('id, cliente_id').eq('categoria', 'Assist Plus').not('cliente_id', 'is', null),
+    ]);
+    const despesaPorCliente = new Map((existentes ?? []).map((d) => [d.cliente_id as string, d.id as string]));
+
+    for (const c of clientes ?? []) {
+      const qtd = [c.aplicativo, ...((c.telas_apps as string[]) ?? [])].filter((a) => a === 'Assist Plus').length;
+      const despesaId = despesaPorCliente.get(c.id);
+      if (qtd > 0) {
+        const valor = Math.round(qtd * custo * 100) / 100;
+        const descricao = `Assist Plus — ${c.nome} (${qtd} tela${qtd > 1 ? 's' : ''})`;
+        if (despesaId) {
+          await supabase.from('despesas').update({ descricao, valor }).eq('id', despesaId);
+        } else {
+          await supabase.from('despesas').insert({
+            descricao, categoria: 'Assist Plus', valor, data: hojeISO(), recorrente: true, cliente_id: c.id,
+          });
+        }
+      } else if (despesaId) {
+        await supabase.from('despesas').delete().eq('id', despesaId);
+      }
+    }
+  }
+
   async function salvarPlanos() {
     setSalvando(true);
     for (const p of planos) {
@@ -89,11 +119,13 @@ export default function ConfiguracoesPage() {
         return toast(`Erro ao salvar plano ${p.nome}: ${error.message}`, 'erro');
       }
     }
+    const custoPorTela = parseFloat(telasConfig.custo_por_tela || '0') || 0;
     await salvarSetting('comissao_padrao', { tipo: comissaoPadrao.tipo, valor: parseFloat(comissaoPadrao.valor || '0') || 0 }, '');
     await salvarSetting('revenda_padrao', { valor_por_acesso: parseFloat(revendaPadrao.valor_por_acesso || '0') || 0 }, '');
-    await salvarSetting('telas_config', { custo_por_tela: parseFloat(telasConfig.custo_por_tela || '0') || 0 }, '');
+    await salvarSetting('telas_config', { custo_por_tela: custoPorTela }, '');
+    await resincronizarDespesasAssistPlus(custoPorTela);
     setSalvando(false);
-    toast('Planos e padrões salvos.');
+    toast('Planos e padrões salvos — despesas de Assist Plus recalculadas.');
   }
 
   async function chamarUazapi(acao: string) {
