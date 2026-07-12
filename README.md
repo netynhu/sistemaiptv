@@ -1,4 +1,4 @@
-# Sistema Alfenas — Gestão e Controle
+# Sistema IPTV — Gestão e Controle
 
 Sistema de gestão de clientes de TV por assinatura com revendedores, comissões, cobrança via WhatsApp (Uazapi), agente de IA para suporte, controle financeiro e relatórios.
 

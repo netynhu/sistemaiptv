@@ -163,7 +163,7 @@ export default function PainelLayout({ children }: { children: React.ReactNode }
             <Tv size={20} />
           </div>
           <div>
-            <div className="text-white font-bold text-sm leading-tight">Sistema Alfenas</div>
+            <div className="text-white font-bold text-sm leading-tight">Sistema IPTV</div>
             <div className="text-slate-400 text-[11px]">Gestão &amp; Controle</div>
           </div>
         </div>
@@ -182,7 +182,7 @@ export default function PainelLayout({ children }: { children: React.ReactNode }
           <div className="absolute inset-0 bg-slate-900/60" onClick={() => setAberto(false)} />
           <aside className="absolute inset-y-0 left-0 w-64 bg-slate-900 flex flex-col py-4">
             <div className="flex items-center justify-between px-5 pb-4">
-              <span className="text-white font-bold">Sistema Alfenas</span>
+              <span className="text-white font-bold">Sistema IPTV</span>
               <button onClick={() => setAberto(false)} className="text-slate-400">
                 <X size={20} />
               </button>
@@ -204,7 +204,7 @@ export default function PainelLayout({ children }: { children: React.ReactNode }
           <button onClick={() => setAberto(true)} className="text-slate-600">
             <Menu size={22} />
           </button>
-          <span className="font-bold text-slate-800">Sistema Alfenas</span>
+          <span className="font-bold text-slate-800">Sistema IPTV</span>
         </header>
         <main className="flex-1 p-4 lg:p-6 max-w-[1400px] w-full mx-auto">{children}</main>
       </div>

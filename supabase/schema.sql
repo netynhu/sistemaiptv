@@ -1,5 +1,5 @@
 -- ============================================================
--- SISTEMA ALFENAS — Schema do Supabase
+-- SISTEMA IPTV — Schema do Supabase
 -- Execute este arquivo no SQL Editor do seu projeto Supabase.
 -- ============================================================
 

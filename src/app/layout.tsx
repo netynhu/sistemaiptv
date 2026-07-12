@@ -5,7 +5,7 @@ import './globals.css';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Sistema Alfenas',
+  title: 'Sistema IPTV',
   description: 'Gestão e controle de clientes, revendedores e cobranças',
 };
 
