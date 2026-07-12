@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
@@ -15,6 +15,8 @@ import {
   Settings,
   LogOut,
   Menu,
+  Moon,
+  Sun,
   Tv,
   X,
   ChevronDown,
@@ -111,6 +113,22 @@ export default function PainelLayout({ children }: { children: React.ReactNode }
   const pathname = usePathname();
   const router = useRouter();
   const [aberto, setAberto] = useState(false);
+  const [escuro, setEscuro] = useState(false);
+
+  useEffect(() => {
+    setEscuro(document.documentElement.classList.contains('dark'));
+  }, []);
+
+  function alternarTema() {
+    const novo = !escuro;
+    setEscuro(novo);
+    document.documentElement.classList.toggle('dark', novo);
+    try {
+      localStorage.setItem('tema', novo ? 'escuro' : 'claro');
+    } catch {
+      /* armazenamento indisponível — o tema vale só para esta aba */
+    }
+  }
 
   async function sair() {
     const supabase = createClient();
@@ -168,12 +186,21 @@ export default function PainelLayout({ children }: { children: React.ReactNode }
           </div>
         </div>
         <div className="flex-1 overflow-y-auto">{nav}</div>
-        <button
-          onClick={sair}
-          className="flex items-center gap-3 px-6 py-4 text-sm text-slate-400 hover:text-white border-t border-slate-800"
-        >
-          <LogOut size={18} /> Sair
-        </button>
+        <div className="flex items-center border-t border-white/[0.06]">
+          <button
+            onClick={sair}
+            className="flex-1 flex items-center gap-3 px-6 py-4 text-sm text-slate-400 hover:text-white"
+          >
+            <LogOut size={18} /> Sair
+          </button>
+          <button
+            onClick={alternarTema}
+            title={escuro ? 'Mudar para tema claro' : 'Mudar para tema escuro'}
+            className="px-5 py-4 text-slate-400 hover:text-white"
+          >
+            {escuro ? <Sun size={18} /> : <Moon size={18} />}
+          </button>
+        </div>
       </aside>
 
       {/* Sidebar mobile */}
@@ -188,12 +215,21 @@ export default function PainelLayout({ children }: { children: React.ReactNode }
               </button>
             </div>
             <div className="flex-1 overflow-y-auto">{nav}</div>
-            <button
-              onClick={sair}
-              className="flex items-center gap-3 px-6 py-4 text-sm text-slate-400 hover:text-white border-t border-slate-800"
-            >
-              <LogOut size={18} /> Sair
-            </button>
+            <div className="flex items-center border-t border-white/[0.06]">
+              <button
+                onClick={sair}
+                className="flex-1 flex items-center gap-3 px-6 py-4 text-sm text-slate-400 hover:text-white"
+              >
+                <LogOut size={18} /> Sair
+              </button>
+              <button
+                onClick={alternarTema}
+                title={escuro ? 'Mudar para tema claro' : 'Mudar para tema escuro'}
+                className="px-5 py-4 text-slate-400 hover:text-white"
+              >
+                {escuro ? <Sun size={18} /> : <Moon size={18} />}
+              </button>
+            </div>
           </aside>
         </div>
       )}

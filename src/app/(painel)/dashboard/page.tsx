@@ -2,11 +2,11 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Badge, Card, Carregando, PageTitle, Td, Th, Vazio } from '@/components/ui';
+import { Badge, Btn, Card, Carregando, PageTitle, Td, Th, toast, Vazio } from '@/components/ui';
 import { diasAte, fmtData, fmtMoeda, fmtTelefone, mesAtualISO, nomeComUsuario } from '@/lib/utils';
 import type { Cliente } from '@/types';
 import {
-  AlertTriangle, CalendarClock, DollarSign, Receipt, TrendingUp, Users, Wallet, Handshake,
+  AlertTriangle, CalendarClock, DollarSign, MessageCircle, Receipt, TrendingUp, Users, Wallet, Handshake,
 } from 'lucide-react';
 import {
   Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis,
@@ -27,6 +27,9 @@ export default function DashboardPage() {
   const [carregando, setCarregando] = useState(true);
   const [kpis, setKpis] = useState<Kpis | null>(null);
   const [proximos, setProximos] = useState<Cliente[]>([]);
+  const [emRisco, setEmRisco] = useState<Cliente[]>([]);
+  const [cobrancaPorCliente, setCobrancaPorCliente] = useState<Record<string, string>>({});
+  const [cobrandoId, setCobrandoId] = useState<string | null>(null);
   const [grafico, setGrafico] = useState<{ mes: string; Receita: number; Despesas: number }[]>([]);
 
   useEffect(() => {
@@ -39,7 +42,7 @@ export default function DashboardPage() {
       const [cli, cobPagas, cobPendentes, desp, com] = await Promise.all([
         supabase.from('clientes').select('*, planos(nome)').eq('status', 'ativo'),
         supabase.from('cobrancas').select('valor, pago_em').eq('status', 'pago').gte('pago_em', inicioGrafico),
-        supabase.from('cobrancas').select('valor').eq('status', 'pendente'),
+        supabase.from('cobrancas').select('id, valor, cliente_id, tipo').eq('status', 'pendente'),
         supabase.from('despesas').select('valor, data').gte('data', inicioGrafico),
         supabase.from('comissoes').select('valor').eq('status', 'pendente'),
       ]);
@@ -90,15 +93,52 @@ export default function DashboardPage() {
         clientes
           .filter((c) => {
             const dias = diasAte(c.data_vencimento);
-            return dias !== null && dias <= 7;
+            return dias !== null && dias >= 0 && dias <= 7;
           })
           .sort((a, b) => (a.data_vencimento ?? '').localeCompare(b.data_vencimento ?? ''))
           .slice(0, 10)
       );
 
+      // Risco de perda: clientes ativos com assinatura vencida, do mais atrasado para o menos
+      setEmRisco(
+        clientes
+          .filter((c) => {
+            const dias = diasAte(c.data_vencimento);
+            return dias !== null && dias < 0;
+          })
+          .sort((a, b) => (a.data_vencimento ?? '').localeCompare(b.data_vencimento ?? ''))
+      );
+
+      // Mapeia a cobrança pendente de cada cliente para o botão "Cobrar" do card de risco
+      const mapa: Record<string, string> = {};
+      for (const c of cobPendentes.data ?? []) {
+        if (c.tipo === 'cliente' && c.cliente_id && !mapa[c.cliente_id]) mapa[c.cliente_id] = c.id;
+      }
+      setCobrancaPorCliente(mapa);
+
       setCarregando(false);
     })();
   }, [supabase]);
+
+  async function cobrar(c: Cliente) {
+    const cobrancaId = cobrancaPorCliente[c.id];
+    if (!cobrancaId) return toast('Nenhuma cobrança pendente encontrada para este cliente.', 'erro');
+    setCobrandoId(c.id);
+    try {
+      const res = await fetch('/api/cobranca/enviar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cobranca_id: cobrancaId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Falha no envio');
+      toast(`Cobrança enviada para ${c.nome} por WhatsApp.`);
+    } catch (e: any) {
+      toast(`Erro ao cobrar: ${e.message}`, 'erro');
+    } finally {
+      setCobrandoId(null);
+    }
+  }
 
   if (carregando || !kpis) return <Carregando />;
 
@@ -150,7 +190,7 @@ export default function DashboardPage() {
           </div>
         </Card>
 
-        <Card title="Próximos vencimentos (7 dias)">
+        <Card title="Próximos vencimentos (7 dias, em dia)">
           {proximos.length === 0 ? (
             <Vazio>Nenhum vencimento nos próximos 7 dias. 🎉</Vazio>
           ) : (
@@ -175,9 +215,7 @@ export default function DashboardPage() {
                         <Td>{(c as any).planos?.nome ?? '—'}</Td>
                         <Td>{fmtData(c.data_vencimento)}</Td>
                         <Td>
-                          {dias < 0 ? (
-                            <Badge cor="vermelho">Vencido há {-dias}d</Badge>
-                          ) : dias === 0 ? (
+                          {dias === 0 ? (
                             <Badge cor="vermelho">Hoje</Badge>
                           ) : (
                             <Badge cor="amarelo">{dias}d</Badge>
@@ -192,6 +230,65 @@ export default function DashboardPage() {
           )}
         </Card>
       </div>
+
+      {/* Risco de perda (churn): vencidos há mais tempo primeiro, com cobrança em 1 clique */}
+      {emRisco.length > 0 && (
+        <div className="mt-5">
+          <Card
+            title={
+              <span className="flex items-center gap-2">
+                <AlertTriangle size={16} className="text-rose-500" /> Risco de perda — {emRisco.length} cliente{emRisco.length > 1 ? 's' : ''} vencido{emRisco.length > 1 ? 's' : ''}
+              </span>
+            }
+          >
+            <div className="overflow-x-auto -m-4">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr>
+                    <Th>Cliente</Th>
+                    <Th>WhatsApp</Th>
+                    <Th>Plano</Th>
+                    <Th>Venceu em</Th>
+                    <Th>Atraso</Th>
+                    <Th className="text-right">Ação</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {emRisco.map((c) => {
+                    const dias = -diasAte(c.data_vencimento)!;
+                    return (
+                      <tr key={c.id}>
+                        <Td className="font-medium">{nomeComUsuario(c.nome, c.usuario)}</Td>
+                        <Td>{fmtTelefone(c.telefone)}</Td>
+                        <Td>{(c as any).planos?.nome ?? '—'}</Td>
+                        <Td>{fmtData(c.data_vencimento)}</Td>
+                        <Td>
+                          <Badge cor={dias >= 7 ? 'vermelho' : 'amarelo'}>{dias}d de atraso</Badge>
+                        </Td>
+                        <Td className="text-right">
+                          <Btn
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => cobrar(c)}
+                            disabled={cobrandoId === c.id || !cobrancaPorCliente[c.id]}
+                            title={cobrancaPorCliente[c.id] ? 'Enviar cobrança por WhatsApp' : 'Sem cobrança pendente'}
+                          >
+                            <MessageCircle size={14} /> {cobrandoId === c.id ? 'Enviando…' : 'Cobrar'}
+                          </Btn>
+                        </Td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-[11px] text-slate-400 mt-4">
+              Clientes com mais de 7 dias de atraso têm alta chance de churn — priorize os do topo. O botão envia a
+              cobrança pendente por WhatsApp com o PIX.
+            </p>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

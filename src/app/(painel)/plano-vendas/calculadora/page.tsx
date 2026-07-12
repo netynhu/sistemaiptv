@@ -5,6 +5,9 @@ import { createClient } from '@/lib/supabase/client';
 import { Btn, Card, Carregando, Input, PageTitle, toast } from '@/components/ui';
 import { fmtMoeda, mesAtualISO } from '@/lib/utils';
 import { CalendarPlus, Rocket, Target, TrendingUp, Users } from 'lucide-react';
+import {
+  Bar, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis,
+} from 'recharts';
 
 export default function CalculadoraMetaPage() {
   const supabase = useMemo(() => createClient(), []);
@@ -19,20 +22,26 @@ export default function CalculadoraMetaPage() {
 
   const [meta, setMeta] = useState('');
   const [ticketMedio, setTicketMedio] = useState('');
+  const [historicoMetas, setHistoricoMetas] = useState<Record<string, number>>({});
+  const [grafico, setGrafico] = useState<{ mes: string; Realizado: number; Meta: number | null }[]>([]);
 
   useEffect(() => {
     (async () => {
       setCarregando(true);
       const mes = mesAtualISO();
       const inicioMes = `${mes}-01`;
+      const seisAtras = new Date();
+      seisAtras.setMonth(seisAtras.getMonth() - 5);
+      const inicioGrafico = seisAtras.toISOString().slice(0, 7) + '-01';
 
-      const [{ data: clientes }, { data: revendedores }, { data: pagasMes }, { data: novos }, cfg] = await Promise.all([
+      const [{ data: clientes }, { data: revendedores }, { data: pagas6m }, { data: novos }, cfg] = await Promise.all([
         supabase.from('clientes').select('valor, planos(meses)').eq('status', 'ativo'),
         supabase.from('revendedores').select('valor_por_acesso, quantidade_clientes').eq('tipo', 'master').eq('ativo', true),
-        supabase.from('cobrancas').select('valor').eq('status', 'pago').gte('pago_em', inicioMes),
+        supabase.from('cobrancas').select('valor, pago_em').eq('status', 'pago').gte('pago_em', inicioGrafico),
         supabase.from('clientes').select('id').gte('data_ativacao', inicioMes),
         supabase.from('settings').select('valor').eq('chave', 'plano_vendas').maybeSingle(),
       ]);
+      const pagasMes = (pagas6m ?? []).filter((c: any) => (c.pago_em ?? '').startsWith(mes));
 
       const clientesAtivos = clientes ?? [];
       const mensalClientes = clientesAtivos.reduce((s: number, c: any) => {
@@ -51,8 +60,30 @@ export default function CalculadoraMetaPage() {
       setNovosMes(novos?.length ?? 0);
 
       // Meta salva (persiste entre sessões — antes ela se perdia ao recarregar)
-      const salva = cfg.data?.valor as { meta_mensal?: number; ticket_medio?: number } | undefined;
+      const salva = cfg.data?.valor as
+        | { meta_mensal?: number; ticket_medio?: number; historico?: Record<string, number> }
+        | undefined;
       if (salva?.meta_mensal) setMeta(String(salva.meta_mensal));
+      const historico = salva?.historico ?? {};
+      setHistoricoMetas(historico);
+
+      // Gráfico: meta registrada × recebido de verdade, últimos 6 meses
+      const nomes = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+      const meses: string[] = [];
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date();
+        d.setMonth(d.getMonth() - i);
+        meses.push(d.toISOString().slice(0, 7));
+      }
+      setGrafico(
+        meses.map((m) => ({
+          mes: nomes[Number(m.split('-')[1]) - 1],
+          Realizado: (pagas6m ?? [])
+            .filter((c: any) => (c.pago_em ?? '').startsWith(m))
+            .reduce((s: number, c: any) => s + Number(c.valor), 0),
+          Meta: historico[m] ?? (m === mes && salva?.meta_mensal ? salva.meta_mensal : null),
+        }))
+      );
 
       const ticket = clientesAtivos.length > 0 ? mensalClientes / clientesAtivos.length : 0;
       setTicketMedio(
@@ -64,16 +95,22 @@ export default function CalculadoraMetaPage() {
 
   async function salvarMeta() {
     setSalvando(true);
+    const metaNum = parseFloat(meta || '0') || 0;
+    // Registra a meta do mês atual no histórico — é isso que alimenta o gráfico Meta × Realizado
+    const historico = { ...historicoMetas, [mesAtualISO()]: metaNum };
     const { error } = await supabase.from('settings').upsert({
       chave: 'plano_vendas',
       valor: {
-        meta_mensal: parseFloat(meta || '0') || 0,
+        meta_mensal: metaNum,
         ticket_medio: parseFloat(ticketMedio || '0') || 0,
+        historico,
       },
       atualizado_em: new Date().toISOString(),
     });
     setSalvando(false);
     if (error) return toast(`Erro ao salvar: ${error.message}`, 'erro');
+    setHistoricoMetas(historico);
+    setGrafico((g) => g.map((p, i) => (i === g.length - 1 ? { ...p, Meta: metaNum } : p)));
     toast('Meta salva — ela fica registrada e acompanha seu progresso todo mês.');
   }
 
@@ -222,6 +259,28 @@ export default function CalculadoraMetaPage() {
           </Card>
         </div>
       )}
+
+      <div className="mt-5">
+        <Card title="Meta × Realizado (últimos 6 meses)">
+          <div className="h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={grafico}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis dataKey="mes" tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `R$${v}`} />
+                <Tooltip formatter={(v) => fmtMoeda(Number(v ?? 0))} />
+                <Legend />
+                <Bar dataKey="Realizado" fill="#4f46e5" radius={[4, 4, 0, 0]} />
+                <Line type="monotone" dataKey="Meta" stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 4 }} connectNulls={false} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+          <p className="text-[11px] text-slate-400 mt-2">
+            &quot;Realizado&quot; = cobranças pagas no mês (dinheiro que entrou). A linha &quot;Meta&quot; usa a meta
+            que estava salva em cada mês — salve a meta todo mês para construir o histórico.
+          </p>
+        </Card>
+      </div>
     </div>
   );
 }

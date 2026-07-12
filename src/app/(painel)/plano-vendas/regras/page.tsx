@@ -24,12 +24,15 @@ export default function RegrasPlanosPage() {
 
   const [revendedores, setRevendedores] = useState<Revendedor[]>([]);
   const [indicadores, setIndicadores] = useState<Revendedor[]>([]);
+  const [funil, setFunil] = useState<Record<string, { clientes: number; mrr: number; comissoes: number }>>({});
 
   async function carregar() {
     setCarregando(true);
-    const [cfg, rev] = await Promise.all([
+    const [cfg, rev, cli, com] = await Promise.all([
       supabase.from('settings').select('valor').eq('chave', 'regras_planos').maybeSingle(),
       supabase.from('revendedores').select('*').eq('ativo', true).order('nome'),
+      supabase.from('clientes').select('valor, revendedor_id, planos(meses)').eq('status', 'ativo').not('revendedor_id', 'is', null),
+      supabase.from('comissoes').select('indicador_id, valor'),
     ]);
     const valor = cfg.data?.valor as { texto_regras?: string; faixas_indicacao?: Faixa[]; faixas_revenda?: Faixa[] } | undefined;
     setTextoRegras(valor?.texto_regras ?? '');
@@ -37,7 +40,26 @@ export default function RegrasPlanosPage() {
     setFaixasRevenda(valor?.faixas_revenda?.length ? valor.faixas_revenda : []);
     const todos = (rev.data as Revendedor[]) ?? [];
     setRevendedores(todos.filter((r) => r.tipo === 'master'));
-    setIndicadores(todos.filter((r) => r.tipo === 'indicacao'));
+
+    // Funil: quantos clientes ativos cada indicador trouxe, o MRR que geram e as comissões pagas a ele
+    const f: Record<string, { clientes: number; mrr: number; comissoes: number }> = {};
+    for (const c of (cli.data as any[]) ?? []) {
+      const id = c.revendedor_id as string;
+      if (!f[id]) f[id] = { clientes: 0, mrr: 0, comissoes: 0 };
+      f[id].clientes++;
+      f[id].mrr += Number(c.valor) / (c.planos?.meses || 1);
+    }
+    for (const c of (com.data as any[]) ?? []) {
+      const id = c.indicador_id as string;
+      if (!f[id]) f[id] = { clientes: 0, mrr: 0, comissoes: 0 };
+      f[id].comissoes += Number(c.valor);
+    }
+    setFunil(f);
+    setIndicadores(
+      todos
+        .filter((r) => r.tipo === 'indicacao')
+        .sort((a, b) => (f[b.id]?.clientes ?? 0) - (f[a.id]?.clientes ?? 0))
+    );
     setCarregando(false);
   }
 
@@ -112,6 +134,7 @@ export default function RegrasPlanosPage() {
                       <Th>Nome</Th>
                       <Th>Valor/acesso</Th>
                       <Th>Qtd. acessos</Th>
+                      <Th>MRR</Th>
                     </tr>
                   </thead>
                   <tbody>
@@ -120,32 +143,48 @@ export default function RegrasPlanosPage() {
                         <Td>{r.nome}</Td>
                         <Td>{fmtMoeda(r.valor_por_acesso)}</Td>
                         <Td>{r.quantidade_clientes}</Td>
+                        <Td className="font-medium">{fmtMoeda(Number(r.valor_por_acesso) * Number(r.quantidade_clientes))}</Td>
                       </tr>
                     ))}
                   </tbody>
                 </Tabela>
               )}
             </Card>
-            <Card title={`Indicadores atuais (${indicadores.length})`}>
+            <Card title={`Funil de indicadores (${indicadores.length})`}>
               {indicadores.length === 0 ? (
                 <p className="text-sm text-slate-400">Nenhum indicador ativo.</p>
               ) : (
-                <Tabela>
-                  <thead>
-                    <tr>
-                      <Th>Nome</Th>
-                      <Th>Comissão</Th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {indicadores.map((r) => (
-                      <tr key={r.id}>
-                        <Td>{r.nome}</Td>
-                        <Td>{r.comissao_tipo === 'percentual' ? `${r.comissao_valor}%` : fmtMoeda(r.comissao_valor)}</Td>
+                <>
+                  <Tabela>
+                    <thead>
+                      <tr>
+                        <Th>Nome</Th>
+                        <Th>Clientes ativos</Th>
+                        <Th>MRR gerado</Th>
+                        <Th>Comissões</Th>
+                        <Th>Comissão atual</Th>
                       </tr>
-                    ))}
-                  </tbody>
-                </Tabela>
+                    </thead>
+                    <tbody>
+                      {indicadores.map((r) => {
+                        const d = funil[r.id] ?? { clientes: 0, mrr: 0, comissoes: 0 };
+                        return (
+                          <tr key={r.id}>
+                            <Td className="font-medium">{r.nome}</Td>
+                            <Td>{d.clientes}</Td>
+                            <Td>{fmtMoeda(d.mrr)}</Td>
+                            <Td>{fmtMoeda(d.comissoes)}</Td>
+                            <Td>{r.comissao_tipo === 'percentual' ? `${r.comissao_valor}%` : fmtMoeda(r.comissao_valor)}</Td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </Tabela>
+                  <p className="text-[11px] text-slate-400 mt-2">
+                    Ordenado por quem mais trouxe clientes — use para decidir onde aumentar a comissão e
+                    incentivar quem mais gera receita.
+                  </p>
+                </>
               )}
             </Card>
           </div>
