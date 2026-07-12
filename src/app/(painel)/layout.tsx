@@ -46,6 +46,9 @@ const MENU: EntradaMenu[] = [
       { href: '/financeiro/despesas', label: 'Despesas' },
     ],
   },
+  { href: '/relatorios', label: 'Relatórios', icon: BarChart3 },
+  { href: '/suporte', label: 'Suporte', icon: Headset },
+  { href: '/configuracoes', label: 'Configurações', icon: Settings },
   {
     label: 'Plano de vendas', icon: Target,
     children: [
@@ -53,9 +56,6 @@ const MENU: EntradaMenu[] = [
       { href: '/plano-vendas/regras', label: 'Regras e planos' },
     ],
   },
-  { href: '/relatorios', label: 'Relatórios', icon: BarChart3 },
-  { href: '/suporte', label: 'Suporte', icon: Headset },
-  { href: '/configuracoes', label: 'Configurações', icon: Settings },
 ];
 
 function NavGrupo({
