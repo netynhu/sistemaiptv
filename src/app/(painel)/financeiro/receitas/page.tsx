@@ -7,7 +7,7 @@ import {
 } from '@/components/ui';
 import { addMeses, diasAte, fmtData, fmtMoeda, hojeISO, mesAtualISO } from '@/lib/utils';
 import type { Cobranca } from '@/types';
-import { CheckCircle2, MessageCircle, Store, Users, XCircle } from 'lucide-react';
+import { CheckCircle2, MessageCircle, Search, Store, Users, XCircle } from 'lucide-react';
 
 type Aba = 'pendentes' | 'pagas' | 'todas';
 
@@ -17,6 +17,8 @@ export default function ReceitasPage() {
   const [cobrancas, setCobrancas] = useState<Cobranca[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [enviandoId, setEnviandoId] = useState<string | null>(null);
+  const [mes, setMes] = useState('');
+  const [busca, setBusca] = useState('');
 
   // modal de pagamento
   const [pagando, setPagando] = useState<Cobranca | null>(null);
@@ -192,8 +194,10 @@ export default function ReceitasPage() {
   }
 
   const visiveis = cobrancas.filter((c) => {
-    if (aba === 'pendentes') return c.status === 'pendente';
-    if (aba === 'pagas') return c.status === 'pago';
+    if (aba === 'pendentes' && c.status !== 'pendente') return false;
+    if (aba === 'pagas' && c.status !== 'pago') return false;
+    if (mes && !c.vencimento.startsWith(mes)) return false;
+    if (busca && !nomeDestino(c).toLowerCase().includes(busca.toLowerCase())) return false;
     return true;
   });
 
@@ -236,32 +240,63 @@ export default function ReceitasPage() {
         clientes ele tem.
       </p>
 
-      <div className="flex gap-1 mb-4 bg-slate-200/70 rounded-lg p-1 w-fit">
-        {(
-          [
-            ['pendentes', 'Pendentes'],
-            ['pagas', 'Pagas'],
-            ['todas', 'Todas'],
-          ] as [Aba, string][]
-        ).map(([k, label]) => (
-          <button
-            key={k}
-            onClick={() => setAba(k)}
-            className={
-              aba === k
-                ? 'px-4 py-1.5 rounded-md bg-white shadow text-sm font-medium text-slate-800'
-                : 'px-4 py-1.5 rounded-md text-sm text-slate-500 hover:text-slate-800'
-            }
-          >
-            {label}
-          </button>
-        ))}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <div className="flex gap-1 bg-slate-200/70 rounded-lg p-1 w-fit">
+          {(
+            [
+              ['pendentes', 'Pendentes'],
+              ['pagas', 'Pagas'],
+              ['todas', 'Todas'],
+            ] as [Aba, string][]
+          ).map(([k, label]) => (
+            <button
+              key={k}
+              onClick={() => setAba(k)}
+              className={
+                aba === k
+                  ? 'px-4 py-1.5 rounded-md bg-white shadow text-sm font-medium text-slate-800'
+                  : 'px-4 py-1.5 rounded-md text-sm text-slate-500 hover:text-slate-800'
+              }
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <div className="relative">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              className="rounded-lg border border-slate-300 bg-white pl-9 pr-3 py-2 text-sm outline-none focus:border-indigo-500 w-56"
+              placeholder="Buscar por nome…"
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+            />
+          </div>
+          <input
+            type="month"
+            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+            value={mes}
+            onChange={(e) => setMes(e.target.value)}
+          />
+          {mes && (
+            <button
+              onClick={() => setMes('')}
+              className="text-xs text-slate-400 hover:text-slate-700 px-1"
+              title="Ver todos os meses"
+            >
+              Limpar mês
+            </button>
+          )}
+        </div>
       </div>
 
       {carregando ? (
         <Carregando />
       ) : visiveis.length === 0 ? (
-        <Vazio>Nenhuma cobrança aqui.</Vazio>
+        <Vazio>
+          {busca || mes ? 'Nenhuma cobrança encontrada com esse filtro.' : 'Nenhuma cobrança aqui.'}
+        </Vazio>
       ) : (
         <Tabela>
           <thead>
