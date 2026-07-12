@@ -1,12 +1,13 @@
 // Agente de IA do suporte — gera respostas usando a base de conhecimento
-// (dispositivos/tutoriais do PDF + links padrão), o cadastro do cliente
-// (identificado pelo WhatsApp) e o provedor configurado.
+// (dispositivos/tutoriais do PDF + links padrão), o cadastro completo do cliente
+// (identificado pelo WhatsApp) e a OpenAI (function calling).
 
 import { createAdminClient } from '@/lib/supabase/server';
 import { getSetting } from '@/lib/settings';
 import { sincronizarDespesaAssistPlus } from '@/lib/despesas';
-import { diasAte, fmtData } from '@/lib/utils';
-import type { AgenteIAConfig, Cliente, LinksPadrao } from '@/types';
+import { sendPixButton } from '@/lib/uazapi';
+import { diasAte, fmtData, fmtMoeda, resolverLinkM3U } from '@/lib/utils';
+import type { AgenteIAConfig, Cliente, LinksPadrao, PagamentosConfig, UazapiConfig } from '@/types';
 
 export async function montarBaseConhecimento(): Promise<string> {
   const admin = createAdminClient();
@@ -61,25 +62,25 @@ export async function montarBaseConhecimento(): Promise<string> {
 }
 
 // Regras de comportamento SEMPRE aplicadas, independentemente do prompt configurado pelo admin.
-// É aqui que garantimos que o agente identifique o cliente, pergunte o problema, use os apps do
-// cadastro, atualize o aparelho e transfira para um humano quando necessário.
-const INSTRUCOES_NUCLEO = `Você é o atendente virtual de suporte de um serviço de IPTV, atendendo pelo WhatsApp.
+const INSTRUCOES_NUCLEO = `Você é o atendente virtual de um serviço de IPTV, atendendo pelo WhatsApp. O cliente já foi identificado pelo número dele (bloco "DADOS DO CLIENTE").
 
 COMO ATENDER:
-1. Comece descobrindo o problema: cumprimente pelo nome (quando souber) e pergunte, de forma objetiva, o que está acontecendo. Não despeje tutoriais antes de entender a dúvida.
-2. Baseie-se no cadastro do cliente (bloco "DADOS DO CLIENTE"): use o dispositivo e o(s) app(s) que ELE já usa para direcionar a ajuda. Não peça informações que já estão no cadastro.
+1. Cumprimente pelo nome e descubra o que o cliente precisa. Entenda a INTENÇÃO da conversa:
+   • PAGAMENTO/RENOVAÇÃO (quer pagar, renovar, "manda o pix", assinatura vencendo): use a ferramenta "enviar_cobranca_pix" para mandar o PIX com botão de copiar. Depois confirme de forma breve e simpática.
+   • SUPORTE/INSTALAÇÃO (não está funcionando, como instalar, trocou de aparelho): ajude usando a BASE DE CONHECIMENTO, sempre com base no dispositivo e app que o cliente usa (nos DADOS DO CLIENTE).
+2. Você TEM os dados de acesso do cliente (usuário, senha, link M3U) nos DADOS DO CLIENTE e PODE informá-los a ele — ele é o titular da conta, já identificado pelo WhatsApp. Nunca compartilhe dados de OUTRO cliente.
 3. Para orientar instalação/configuração, use SEMPRE a BASE DE CONHECIMENTO (apps por dispositivo e passo a passo). Nunca invente passos, links, códigos ou nomes de apps que não estejam na base.
-4. Se o cliente disser que TROCOU de aparelho ou vai passar a usar outro aplicativo, use a ferramenta "atualizar_aparelho_cliente" para atualizar o cadastro dele com o novo dispositivo/app (use exatamente os nomes que aparecem na base de conhecimento) e então oriente a instalação nesse novo app.
-5. NUNCA revele usuário e senha do cliente. Se ele não lembrar os dados de acesso, transfira para um humano.
-6. Transfira para um atendente humano (ferramenta "transferir_para_humano") quando: não conseguir resolver, o cliente pedir para falar com alguém, ou o assunto for financeiro/pagamento/renovação/cancelamento/troca de plano — esses assuntos NÃO são resolvidos por você.
+4. Se o cliente disser que TROCOU de aparelho ou vai usar outro app, use a ferramenta "atualizar_aparelho_cliente" (use exatamente os nomes de dispositivo/app da base de conhecimento) e então oriente a instalação no novo app.
+5. Se NÃO conseguir resolver, se o cliente pedir para falar com uma pessoa, ou se o assunto fugir de pagamento/instalação (ex.: cancelamento, reclamação, cobrança indevida, pedido especial), use a ferramenta "transferir_para_humano". Um atendente humano será avisado.
 
 ESTILO: mensagens curtas e calorosas, como um humano no WhatsApp. Português do Brasil. Não use markdown pesado; no máximo 1–2 emojis por mensagem.`;
 
-function contextoCliente(cliente: Cliente | null): string {
+function contextoCliente(cliente: Cliente | null, m3u: string): string {
   if (!cliente) {
-    return 'Este número de WhatsApp NÃO está vinculado a nenhum cliente cadastrado. Pode ser um contato novo ou um cliente usando outro número. Pergunte o nome dele e como pode ajudar. Não forneça dados de acesso e não invente cadastro. Se ele disser que é cliente, ofereça transferir para um humano confirmar.';
+    return 'Este número de WhatsApp NÃO está vinculado a nenhum cliente cadastrado. Pode ser um contato novo ou um cliente usando outro número. Pergunte o nome dele e como pode ajudar. NÃO forneça dados de acesso e não invente cadastro. Se ele disser que é cliente, use "transferir_para_humano" para um atendente confirmar.';
   }
-  const apps = [cliente.aplicativo, ...(cliente.telas_apps ?? [])].filter(Boolean) as string[];
+  const appPrincipal = cliente.aplicativo || 'não informado';
+  const telasExtras = (cliente.telas_apps ?? []).filter(Boolean);
   const dias = diasAte(cliente.data_vencimento ?? null);
   const situacao =
     cliente.status !== 'ativo'
@@ -96,33 +97,47 @@ function contextoCliente(cliente: Cliente | null): string {
     `Nome: ${cliente.nome}`,
     `Situação: ${situacao}${cliente.data_vencimento ? ` — vencimento em ${fmtData(cliente.data_vencimento)}` : ''}`,
     cliente.planos?.nome ? `Plano: ${cliente.planos.nome}` : null,
+    `Valor da mensalidade: ${fmtMoeda(Number(cliente.valor) || 0)}`,
+    `Usuário: ${cliente.usuario || 'não cadastrado'}`,
+    `Senha: ${cliente.senha || 'não cadastrada'}`,
+    m3u ? `Link M3U do cliente: ${m3u}` : null,
     `Dispositivo cadastrado: ${cliente.dispositivo || 'não informado'}`,
-    `App(s) que o cliente usa: ${apps.length ? apps.join(', ') : 'não informado'}`,
+    `App principal: ${appPrincipal}`,
+    telasExtras.length ? `Telas adicionais: ${telasExtras.join(', ')}` : `Telas adicionais: nenhuma`,
   ].filter(Boolean).join('\n');
 }
 
 export type MensagemIA = { role: 'user' | 'assistant'; content: string };
 
+export type ContextoConversa = { telefone: string; conversaId: string };
+
 export type ResultadoIA = {
   resposta: string | null;
   escalar: { motivo: string } | null;
   atualizouAparelho: { dispositivo: string; aplicativo: string } | null;
+  enviouPix: boolean;
 };
 
-const VAZIO: ResultadoIA = { resposta: null, escalar: null, atualizouAparelho: null };
+const VAZIO: ResultadoIA = { resposta: null, escalar: null, atualizouAparelho: null, enviouPix: false };
 
 export async function gerarRespostaIA(
   historico: MensagemIA[],
-  cliente: Cliente | null
+  cliente: Cliente | null,
+  ctx: ContextoConversa
 ): Promise<ResultadoIA> {
   const cfg = await getSetting<AgenteIAConfig>('agente_ia');
   if (!cfg?.habilitado || !cfg.api_key) return VAZIO;
 
-  const base = await montarBaseConhecimento();
+  const [base, links] = await Promise.all([
+    montarBaseConhecimento(),
+    getSetting<LinksPadrao>('links_padrao'),
+  ]);
+  const m3u = cliente ? resolverLinkM3U(links?.m3u, cliente.usuario, cliente.senha) : '';
+
   const system = [
     INSTRUCOES_NUCLEO,
     cfg.prompt_sistema?.trim() ? `\n=== INSTRUÇÕES ADICIONAIS DO ADMIN ===\n${cfg.prompt_sistema.trim()}` : '',
-    `\n=== DADOS DO CLIENTE (deste WhatsApp) ===\n${contextoCliente(cliente)}`,
+    `\n=== DADOS DO CLIENTE (deste WhatsApp) ===\n${contextoCliente(cliente, m3u)}`,
     `\n=== BASE DE CONHECIMENTO ===\n${base}`,
   ].join('\n');
 
@@ -130,14 +145,69 @@ export async function gerarRespostaIA(
   const msgs = historico.slice(-12).filter((m) => m.content?.trim());
   if (msgs.length === 0) return VAZIO;
 
-  return responderOpenAI(cfg, system, msgs, cliente);
+  return responderOpenAI(cfg, system, msgs, cliente, ctx);
+}
+
+// Envia ao cliente o PIX (com botão de copiar) da cobrança pendente dele. Retorna o texto de
+// resultado que volta para o modelo. Registra a mensagem enviada na conversa (aparece no CRM).
+async function enviarCobrancaPix(cliente: Cliente, ctx: ContextoConversa): Promise<{ msg: string; ok: boolean }> {
+  const admin = createAdminClient();
+  const [uazapi, pagamentos] = await Promise.all([
+    getSetting<UazapiConfig>('uazapi'),
+    getSetting<PagamentosConfig>('pagamentos'),
+  ]);
+  if (!uazapi?.server_url || !uazapi.instance_token) {
+    return { msg: 'WhatsApp não configurado — não foi possível enviar o PIX. Use transferir_para_humano.', ok: false };
+  }
+
+  const { data: cobrancas } = await admin
+    .from('cobrancas')
+    .select('*')
+    .eq('tipo', 'cliente')
+    .eq('cliente_id', cliente.id)
+    .eq('status', 'pendente')
+    .order('vencimento', { ascending: true })
+    .limit(1);
+  const cobranca = (cobrancas ?? [])[0];
+
+  const pixCode = cobranca?.pix_copia_cola || pagamentos?.chave_pix || '';
+  if (!pixCode) {
+    return { msg: 'Não há chave PIX configurada nem cobrança gerada para este cliente. Use transferir_para_humano.', ok: false };
+  }
+
+  const valor = cobranca ? Number(cobranca.valor) : Number(cliente.valor) || 0;
+  const venc = cobranca?.vencimento || cliente.data_vencimento;
+
+  const texto = [
+    'Segue o PIX pra renovar sua assinatura 💚',
+    valor ? `Valor: ${fmtMoeda(valor)}` : null,
+    venc ? `Vencimento: ${fmtData(venc)}` : null,
+    '',
+    'Toque no botão abaixo pra copiar o código e pagar no app do seu banco. Depois é só mandar o comprovante aqui!',
+  ].filter(Boolean).join('\n');
+
+  await sendPixButton(uazapi, ctx.telefone, texto, pixCode);
+
+  await admin.from('mensagens').insert({
+    conversa_id: ctx.conversaId,
+    direcao: 'saida',
+    autor: 'ia',
+    conteudo: `${texto}\n\n[código PIX: ${pixCode}]`,
+  });
+  await admin
+    .from('conversas')
+    .update({ ultima_mensagem: 'PIX enviado ao cliente', atualizado_em: new Date().toISOString() })
+    .eq('id', ctx.conversaId);
+
+  return { msg: `PIX enviado ao cliente com botão de copiar (${fmtMoeda(valor)}). Confirme para ele, de forma breve e amigável, que já mandou o código.`, ok: true };
 }
 
 async function responderOpenAI(
   cfg: AgenteIAConfig,
   system: string,
   msgs: MensagemIA[],
-  cliente: Cliente | null
+  cliente: Cliente | null,
+  ctx: ContextoConversa
 ): Promise<ResultadoIA> {
   const tools: any[] = [
     {
@@ -145,7 +215,7 @@ async function responderOpenAI(
       function: {
         name: 'transferir_para_humano',
         description:
-          'Transfere o atendimento para um atendente humano. Use quando não conseguir resolver, quando o cliente pedir para falar com alguém, ou quando o assunto for financeiro/pagamento/renovação/cancelamento/troca de plano.',
+          'Transfere o atendimento para um atendente humano (que também é avisado num grupo). Use quando não conseguir resolver, quando o cliente pedir para falar com alguém, ou quando o assunto fugir de pagamento/instalação (cancelamento, reclamação, cobrança indevida, pedidos especiais).',
         parameters: {
           type: 'object',
           properties: {
@@ -159,8 +229,17 @@ async function responderOpenAI(
       },
     },
   ];
-  // Só oferece a atualização de cadastro se o cliente estiver identificado.
+  // Ferramentas que dependem de cliente identificado.
   if (cliente) {
+    tools.push({
+      type: 'function',
+      function: {
+        name: 'enviar_cobranca_pix',
+        description:
+          'Envia ao cliente, pelo WhatsApp, o PIX para pagar/renovar a assinatura, com um botão de copiar o código. Use quando o cliente quiser pagar ou renovar, ou pedir a chave/código PIX.',
+        parameters: { type: 'object', properties: {}, required: [] },
+      },
+    });
     tools.push({
       type: 'function',
       function: {
@@ -182,6 +261,7 @@ async function responderOpenAI(
   const messages: any[] = [{ role: 'system', content: system }, ...msgs.map((m) => ({ role: m.role, content: m.content }))];
   let escalar: ResultadoIA['escalar'] = null;
   let atualizou: ResultadoIA['atualizouAparelho'] = null;
+  let enviouPix = false;
 
   // Loop agêntico: executa ferramentas e realimenta o resultado até o modelo produzir a resposta final.
   for (let i = 0; i < 5; i++) {
@@ -206,7 +286,7 @@ async function responderOpenAI(
 
     if (!toolCalls.length) {
       const resposta = (choice?.content ?? '').trim();
-      return { resposta: resposta || null, escalar, atualizouAparelho: atualizou };
+      return { resposta: resposta || null, escalar, atualizouAparelho: atualizou, enviouPix };
     }
 
     // Precisa devolver a mensagem do assistente (com os tool_calls) antes das respostas das ferramentas
@@ -216,11 +296,16 @@ async function responderOpenAI(
       let args: any = {};
       try { args = JSON.parse(tc.function?.arguments || '{}'); } catch { /* ignora argumentos inválidos */ }
       let content = 'Ferramenta indisponível.';
+      const nome = tc.function?.name;
 
-      if (tc.function?.name === 'transferir_para_humano') {
+      if (nome === 'transferir_para_humano') {
         escalar = { motivo: String(args.motivo ?? '').trim() || 'Cliente precisa de atendimento humano.' };
-        content = 'Transferência registrada. Diga ao cliente, de forma acolhedora e breve, que um atendente humano vai continuar o atendimento em instantes.';
-      } else if (tc.function?.name === 'atualizar_aparelho_cliente' && cliente) {
+        content = 'Transferência registrada e um atendente humano será avisado. Diga ao cliente, de forma acolhedora e breve, que uma pessoa vai continuar o atendimento em instantes.';
+      } else if (nome === 'enviar_cobranca_pix' && cliente) {
+        const r = await enviarCobrancaPix(cliente, ctx);
+        enviouPix = enviouPix || r.ok;
+        content = r.msg;
+      } else if (nome === 'atualizar_aparelho_cliente' && cliente) {
         const dispositivo = String(args.dispositivo ?? '').trim();
         const aplicativo = String(args.aplicativo ?? '').trim();
         if (dispositivo && aplicativo) {
@@ -247,5 +332,5 @@ async function responderOpenAI(
   }
 
   // Se esgotou o loop sem resposta final, ao menos preserva ações executadas.
-  return { resposta: null, escalar, atualizouAparelho: atualizou };
+  return { resposta: null, escalar, atualizouAparelho: atualizou, enviouPix };
 }
