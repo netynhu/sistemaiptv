@@ -64,3 +64,17 @@ export function aplicarTemplate(template: string, vars: Record<string, string>):
   }
   return out;
 }
+
+// Resolve o link M3U padrão (ou o do próprio cliente) trocando {{usuario}}/{{senha}}
+// pelos dados reais do cliente. O padrão do link (domínio/parâmetros) é o mesmo para
+// todos — só usuário e senha mudam por cliente, então isso NUNCA é personalizado.
+export function resolverLinkM3U(
+  template: string | null | undefined,
+  usuario: string | null | undefined,
+  senha: string | null | undefined
+): string {
+  if (!template) return '';
+  return template
+    .split('{{usuario}}').join(usuario || '')
+    .split('{{senha}}').join(senha || '');
+}

@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client';
 import {
   Btn, Badge, Carregando, Input, Modal, PageTitle, Select, Tabela, Td, TextArea, Th, toast, Vazio,
 } from '@/components/ui';
-import { addMeses, diasAte, fmtData, fmtMoeda, fmtTelefone, hojeISO, normalizarTelefone } from '@/lib/utils';
+import { addMeses, diasAte, fmtData, fmtMoeda, fmtTelefone, hojeISO, normalizarTelefone, resolverLinkM3U } from '@/lib/utils';
 import type { Cliente, Dispositivo, LinksPadrao, Plano, Revendedor } from '@/types';
 import { Copy, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 
@@ -202,8 +202,12 @@ export default function ClientesPage() {
     carregar();
   }
 
+  function linkM3UDoCliente(c: Cliente): string {
+    return resolverLinkM3U(c.m3u_link || links?.m3u, c.usuario, c.senha);
+  }
+
   function copiarAcesso(c: Cliente) {
-    const m3u = c.m3u_link || links?.m3u || '';
+    const m3u = linkM3UDoCliente(c);
     const texto = [
       `📺 *Dados de acesso — ${c.nome}*`,
       c.usuario && `Usuário: ${c.usuario}`,
@@ -215,6 +219,13 @@ export default function ClientesPage() {
       .join('\n');
     navigator.clipboard.writeText(texto);
     toast('Dados de acesso copiados.');
+  }
+
+  function copiarLinkM3U(c: Cliente) {
+    const link = linkM3UDoCliente(c);
+    if (!link) return toast('Nenhum link M3U configurado (nem do cliente, nem o padrão).', 'erro');
+    navigator.clipboard.writeText(link);
+    toast('Link M3U copiado.');
   }
 
   const filtrados = clientes.filter((c) => {
@@ -305,8 +316,20 @@ export default function ClientesPage() {
               <tr key={c.id} className="hover:bg-slate-50">
                 <Td>
                   <div className="font-medium text-slate-800">{c.nome}</div>
-                  <div className="text-xs text-slate-400">
-                    {c.usuario && <>usuário: {c.usuario} · </>}
+                  <div className="text-xs text-slate-400 flex items-center gap-1">
+                    {c.usuario && (
+                      <span className="inline-flex items-center gap-1">
+                        usuário: {c.usuario}
+                        <button
+                          onClick={() => copiarLinkM3U(c)}
+                          title="Copiar link M3U deste usuário"
+                          className="text-slate-300 hover:text-indigo-600"
+                        >
+                          <Copy size={11} />
+                        </button>
+                        {' · '}
+                      </span>
+                    )}
                     {c.dispositivo || ''}
                   </div>
                 </Td>
@@ -380,6 +403,27 @@ export default function ClientesPage() {
           <Input label="WhatsApp" placeholder="(35) 99999-0000" value={form.telefone} onChange={(e) => setForm({ ...form, telefone: e.target.value })} />
           <Input label="Usuário" value={form.usuario} onChange={(e) => setForm({ ...form, usuario: e.target.value })} />
           <Input label="Senha" value={form.senha} onChange={(e) => setForm({ ...form, senha: e.target.value })} />
+
+          {resolverLinkM3U(form.m3u_link || links?.m3u, form.usuario, form.senha) && (
+            <div className="sm:col-span-2">
+              <span className="block text-xs font-medium text-slate-600 mb-1">Link M3U deste usuário</span>
+              <div className="flex gap-2">
+                <div className="flex-1 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs truncate">
+                  {resolverLinkM3U(form.m3u_link || links?.m3u, form.usuario, form.senha)}
+                </div>
+                <Btn
+                  type="button" size="sm" variant="secondary"
+                  onClick={() => {
+                    navigator.clipboard.writeText(resolverLinkM3U(form.m3u_link || links?.m3u, form.usuario, form.senha));
+                    toast('Link M3U copiado.');
+                  }}
+                >
+                  <Copy size={14} /> Copiar
+                </Btn>
+              </div>
+            </div>
+          )}
+
           <Select label="Plano" value={form.plano_id} onChange={(e) => aoMudarPlano(e.target.value)}>
             <option value="">Selecione…</option>
             {planos.map((p) => (
@@ -458,7 +502,14 @@ export default function ClientesPage() {
               <option key={r.id} value={r.id}>🤝 {r.nome}</option>
             ))}
           </Select>
-          <Input label="Link M3U (opcional)" className="sm:col-span-2" placeholder={links?.m3u ? `Padrão: ${links.m3u}` : 'Deixe vazio para usar o link padrão das Configurações'} value={form.m3u_link} onChange={(e) => setForm({ ...form, m3u_link: e.target.value })} />
+          <Input
+            label="Link M3U (só se for diferente do padrão)"
+            className="sm:col-span-2"
+            placeholder={links?.m3u ? `Padrão: ${links.m3u}` : 'Deixe vazio para usar o link padrão das Configurações'}
+            value={form.m3u_link}
+            onChange={(e) => setForm({ ...form, m3u_link: e.target.value })}
+            hint="Deixe vazio na maioria dos casos — o link padrão já usa {{usuario}} e {{senha}} deste cliente automaticamente."
+          />
           <Select label="Status" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
             <option value="ativo">Ativo</option>
             <option value="suspenso">Suspenso</option>

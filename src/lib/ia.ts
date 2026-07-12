@@ -37,12 +37,23 @@ export async function montarBaseConhecimento(): Promise<string> {
     })
     .join('\n\n');
 
+  const infoM3U = l.m3u
+    ? [
+        '## Link M3U',
+        `O link M3U segue sempre o mesmo padrão para todos os clientes — só o usuário e a senha mudam de um cliente para outro. Não é possível personalizar o link em si (domínio/parâmetros) por cliente, apenas usuário e senha.`,
+        `Modelo do link: ${l.m3u}`,
+        'Para montar o link de um cliente específico, troque {{usuario}} pelo usuário dele e {{senha}} pela senha dele. Se o cliente perguntar se pode mudar o link, explique que o padrão é fixo e só usuário/senha são individuais.',
+      ].join('\n')
+    : '';
+
   return [
     '## Apps compatíveis por dispositivo',
     linhasDisp,
     '',
     '## Como configurar cada aplicativo',
     blocosTut,
+    '',
+    infoM3U,
   ].join('\n');
 }
 

@@ -218,7 +218,12 @@ export default function ConfiguracoesPage() {
         <div className="space-y-5 max-w-2xl">
           <Card title="Links e códigos padrão dos aplicativos">
             <div className="space-y-3">
-              <Input label="Link M3U padrão" value={links.m3u} onChange={(e) => setLinks({ ...links, m3u: e.target.value })} hint="Usado quando o cliente não tem um link M3U próprio. Pode mudar com o tempo — atualize aqui." />
+              <Input
+                label="Link M3U padrão"
+                value={links.m3u}
+                onChange={(e) => setLinks({ ...links, m3u: e.target.value })}
+                hint={'Use {{usuario}} e {{senha}} no lugar do usuário/senha — o sistema troca automaticamente pelos dados de cada cliente. Ex.: http://seudominio.com/get.php?username={{usuario}}&password={{senha}}&type=m3u_plus. O domínio e os parâmetros são iguais para todos — não é possível personalizar isso por cliente, só usuário e senha mudam.'}
+              />
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Input label="URL — IPTV Smarters Pro" value={links.smarters_url} onChange={(e) => setLinks({ ...links, smarters_url: e.target.value })} />
                 <Input label="Nome (campo do Smarters)" value={links.smarters_nome} onChange={(e) => setLinks({ ...links, smarters_nome: e.target.value })} />
