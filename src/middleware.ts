@@ -1,7 +1,9 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
-const ROTAS_PUBLICAS = ['/login', '/api/webhook'];
+// /api/automacao tem seu próprio segredo (AUTOMACAO_SECRET) e é chamado por cron externo
+// (n8n), sem sessão — por isso fica de fora da checagem de login, igual /api/webhook.
+const ROTAS_PUBLICAS = ['/login', '/api/webhook', '/api/automacao'];
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });

@@ -11,7 +11,16 @@ import type { AvisosConfig, Cobranca, PagamentosConfig, UazapiConfig } from '@/t
 //  1. Envia a cobrança de quem vence hoje.
 //  2. Envia o followup de atraso de quem venceu ontem e ainda não pagou.
 //  3. Manda o resumo dos recebimentos de ontem para o grupo de aviso dos administradores.
+// Aceita POST e GET — cron externo (n8n, cron-job.org etc.) pode chamar com qualquer um dos dois.
 export async function POST(req: NextRequest) {
+  return executar(req);
+}
+
+export async function GET(req: NextRequest) {
+  return executar(req);
+}
+
+async function executar(req: NextRequest) {
   const segredo = process.env.AUTOMACAO_SECRET;
   const enviado = req.headers.get('x-automacao-secret') || req.nextUrl.searchParams.get('secret');
   if (!segredo || enviado !== segredo) {
