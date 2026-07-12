@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client';
 import {
   Btn, Badge, Card, Carregando, Input, Modal, PageTitle, Select, Tabela, Td, Th, toast, Vazio,
 } from '@/components/ui';
-import { addMeses, diasAte, fmtData, fmtMoeda, hojeISO, mesAtualISO } from '@/lib/utils';
+import { addMeses, diasAte, fmtData, fmtMoeda, hojeISO, mesAtualISO, nomeComUsuario } from '@/lib/utils';
 import type { Cobranca } from '@/types';
 import { CheckCircle2, MessageCircle, Search, Store, Users, XCircle } from 'lucide-react';
 
@@ -207,7 +207,9 @@ export default function ReceitasPage() {
   const totalPendenteRevendas = pendentesRevendas.reduce((s, c) => s + Number(c.valor), 0);
 
   function nomeDestino(c: Cobranca) {
-    return c.tipo === 'cliente' ? c.clientes?.nome ?? '—' : c.revendedores?.nome ?? '—';
+    return c.tipo === 'cliente'
+      ? nomeComUsuario(c.clientes?.nome, c.clientes?.usuario)
+      : c.revendedores?.nome ?? '—';
   }
 
   return (

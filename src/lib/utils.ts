@@ -40,6 +40,12 @@ export function fmtTelefone(tel: string | null): string {
   return tel;
 }
 
+// Exibição padrão do cliente nas telas do painel: "Nome (usuário)"
+export function nomeComUsuario(nome: string | null | undefined, usuario?: string | null): string {
+  if (!nome) return '—';
+  return usuario ? `${nome} (${usuario})` : nome;
+}
+
 export function mesAtualISO(): string {
   return new Date().toISOString().slice(0, 7); // YYYY-MM
 }

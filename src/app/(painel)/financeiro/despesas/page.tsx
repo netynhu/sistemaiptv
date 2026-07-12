@@ -3,12 +3,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import {
-  Btn, Badge, Card, Carregando, Input, Modal, PageTitle, Select, Tabela, Td, TextArea, Th, toast, Vazio,
+  Btn, Badge, Card, Carregando, cls, Input, Modal, PageTitle, Select, Tabela, Td, TextArea, Th, toast, Vazio,
 } from '@/components/ui';
-import { fmtData, fmtMoeda, fmtTelefone, hojeISO, mesAtualISO, nomeMes } from '@/lib/utils';
-import type { Comissao, Despesa } from '@/types';
+import { fmtData, fmtMoeda, fmtTelefone, hojeISO, mesAtualISO, nomeComUsuario, nomeMes } from '@/lib/utils';
+import type { Comissao, Despesa, Revendedor } from '@/types';
 import {
-  CheckCircle2, Copy, CreditCard, Pencil, Plus, Receipt, RotateCcw, Trash2, Wallet,
+  CheckCircle2, ChevronDown, Copy, CreditCard, Pencil, Plus, Receipt, RotateCcw, Trash2, Users, Wallet,
 } from 'lucide-react';
 
 const CATEGORIAS = ['Servidor', 'Painel', 'Assist Plus', 'Aplicativos', 'Internet', 'Marketing', 'Impostos', 'Geral'];
@@ -31,10 +31,11 @@ export default function DespesasPage() {
     pago: false, pago_em: hojeISO(), observacoes: '',
   });
 
-  // ---- Indicações (comissões) ----
+  // ---- Indicações (comissões, agrupadas por indicador) ----
   const [comissoes, setComissoes] = useState<Comissao[]>([]);
   const [carregandoCom, setCarregandoCom] = useState(true);
-  const [verIndicador, setVerIndicador] = useState<Comissao | null>(null);
+  const [verIndicador, setVerIndicador] = useState<Revendedor | null>(null);
+  const [abertos, setAbertos] = useState<Record<string, boolean>>({});
 
   async function carregarDespesas() {
     setCarregando(true);
@@ -139,7 +140,10 @@ export default function DespesasPage() {
     if (error) return toast(`Erro: ${error.message}`, 'erro');
     toast('Comissão marcada como paga.');
     carregarComissoes();
-    if (verIndicador?.id === cm.id) setVerIndicador(null);
+  }
+
+  function alternarGrupo(indicadorId: string) {
+    setAbertos((a) => ({ ...a, [indicadorId]: !a[indicadorId] }));
   }
 
   function copiarPix(chave: string | null | undefined) {
@@ -154,6 +158,21 @@ export default function DespesasPage() {
 
   const totalComissoesPendentes = comissoes.filter((c) => c.status === 'pendente').reduce((s, c) => s + Number(c.valor), 0);
   const totalComissoesPagas = comissoes.filter((c) => c.status === 'pago').reduce((s, c) => s + Number(c.valor), 0);
+
+  // Agrupa as comissões por indicador — o nome aparece uma única vez, com o total dele
+  const gruposIndicadores = useMemo(() => {
+    const mapa = new Map<string, { indicador: Revendedor; itens: Comissao[]; pendente: number; pago: number }>();
+    for (const cm of comissoes) {
+      const ind = (cm as any).revendedores as Revendedor | null;
+      if (!ind) continue;
+      if (!mapa.has(ind.id)) mapa.set(ind.id, { indicador: ind, itens: [], pendente: 0, pago: 0 });
+      const grupo = mapa.get(ind.id)!;
+      grupo.itens.push(cm);
+      if (cm.status === 'pendente') grupo.pendente += Number(cm.valor);
+      else grupo.pago += Number(cm.valor);
+    }
+    return Array.from(mapa.values()).sort((a, b) => b.pendente - a.pendente);
+  }, [comissoes]);
 
   return (
     <div>
@@ -320,56 +339,87 @@ export default function DespesasPage() {
 
           {carregandoCom ? (
             <Carregando />
-          ) : comissoes.length === 0 ? (
+          ) : gruposIndicadores.length === 0 ? (
             <Vazio>Nenhuma comissão gerada ainda. Elas são criadas automaticamente ao registrar o pagamento de um cliente indicado (em Financeiro &gt; Receitas).</Vazio>
           ) : (
-            <Tabela>
-              <thead>
-                <tr>
-                  <Th>Indicador</Th>
-                  <Th>Cliente</Th>
-                  <Th>Valor</Th>
-                  <Th>Status</Th>
-                  <Th>Pago em</Th>
-                  <Th className="text-right">Ações</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {comissoes.map((cm) => (
-                  <tr key={cm.id} className="hover:bg-slate-50">
-                    <Td>
+            <div className="space-y-3">
+              {gruposIndicadores.map((g) => {
+                const aberto = !!abertos[g.indicador.id];
+                return (
+                  <div key={g.indicador.id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div className="flex items-center justify-between gap-3 px-4 py-3">
                       <button
-                        onClick={() => setVerIndicador(cm)}
-                        className="font-medium text-indigo-600 hover:underline"
-                        title="Ver dados de pagamento (PIX)"
+                        type="button"
+                        onClick={() => alternarGrupo(g.indicador.id)}
+                        className="flex items-center gap-3 flex-1 min-w-0 text-left"
                       >
-                        {(cm as any).revendedores?.nome ?? '—'}
+                        <ChevronDown size={16} className={cls('shrink-0 text-slate-400 transition-transform', aberto && 'rotate-180')} />
+                        <div className="min-w-0">
+                          <div className="font-medium text-slate-800 truncate">{g.indicador.nome}</div>
+                          <div className="text-xs text-slate-400 flex items-center gap-1">
+                            <Users size={12} /> {g.itens.length} cliente{g.itens.length > 1 ? 's' : ''} indicado{g.itens.length > 1 ? 's' : ''}
+                          </div>
+                        </div>
                       </button>
-                    </Td>
-                    <Td>{cm.clientes?.nome ?? '—'}</Td>
-                    <Td>{fmtMoeda(cm.valor)}</Td>
-                    <Td>
-                      {cm.status === 'pago' ? <Badge cor="verde">Paga</Badge> : <Badge cor="amarelo">Pendente</Badge>}
-                    </Td>
-                    <Td>{fmtData(cm.pago_em)}</Td>
-                    <Td className="text-right whitespace-nowrap">
-                      <button
-                        onClick={() => setVerIndicador(cm)}
-                        className="p-1.5 text-slate-400 hover:text-indigo-600"
-                        title="Ver PIX para pagar"
-                      >
-                        <CreditCard size={16} />
-                      </button>
-                      {cm.status === 'pendente' && (
-                        <Btn size="sm" variant="success" onClick={() => marcarComissaoPaga(cm)}>
-                          <CheckCircle2 size={14} /> Marcar paga
-                        </Btn>
-                      )}
-                    </Td>
-                  </tr>
-                ))}
-              </tbody>
-            </Tabela>
+                      <div className="flex items-center gap-4 shrink-0">
+                        {g.pago > 0 && (
+                          <div className="text-right hidden sm:block">
+                            <div className="text-[10px] text-slate-400">Pago</div>
+                            <div className="text-sm font-medium text-emerald-600">{fmtMoeda(g.pago)}</div>
+                          </div>
+                        )}
+                        <div className="text-right">
+                          <div className="text-[10px] text-slate-400">Pendente</div>
+                          <div className="text-sm font-bold text-slate-900">{fmtMoeda(g.pendente)}</div>
+                        </div>
+                        <button
+                          onClick={() => setVerIndicador(g.indicador)}
+                          className="p-1.5 text-slate-400 hover:text-indigo-600"
+                          title="Ver PIX para pagar"
+                        >
+                          <CreditCard size={18} />
+                        </button>
+                      </div>
+                    </div>
+
+                    {aberto && (
+                      <div className="border-t border-slate-100 overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr>
+                              <Th>Cliente</Th>
+                              <Th>Valor</Th>
+                              <Th>Status</Th>
+                              <Th>Pago em</Th>
+                              <Th className="text-right">Ações</Th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {g.itens.map((cm) => (
+                              <tr key={cm.id} className="hover:bg-slate-50">
+                                <Td>{nomeComUsuario(cm.clientes?.nome, cm.clientes?.usuario)}</Td>
+                                <Td>{fmtMoeda(cm.valor)}</Td>
+                                <Td>
+                                  {cm.status === 'pago' ? <Badge cor="verde">Paga</Badge> : <Badge cor="amarelo">Pendente</Badge>}
+                                </Td>
+                                <Td>{fmtData(cm.pago_em)}</Td>
+                                <Td className="text-right">
+                                  {cm.status === 'pendente' && (
+                                    <Btn size="sm" variant="success" onClick={() => marcarComissaoPaga(cm)}>
+                                      <CheckCircle2 size={14} /> Marcar paga
+                                    </Btn>
+                                  )}
+                                </Td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           )}
         </>
       )}
@@ -413,37 +463,26 @@ export default function DespesasPage() {
         open={!!verIndicador}
         onClose={() => setVerIndicador(null)}
         title="Dados para pagamento"
-        footer={
-          verIndicador?.status === 'pendente' ? (
-            <Btn variant="success" onClick={() => verIndicador && marcarComissaoPaga(verIndicador)}>
-              <CheckCircle2 size={14} /> Marcar como paga
-            </Btn>
-          ) : undefined
-        }
       >
         {verIndicador && (
           <div className="space-y-3 text-sm">
             <Card>
-              <div className="font-semibold text-slate-800">{(verIndicador as any).revendedores?.nome ?? '—'}</div>
-              <div className="text-slate-500">{fmtTelefone((verIndicador as any).revendedores?.telefone ?? null)}</div>
-              <div className="text-lg font-bold mt-2">{fmtMoeda(verIndicador.valor)}</div>
-              <div className="text-xs text-slate-400">Comissão referente a {verIndicador.clientes?.nome ?? 'cliente indicado'}</div>
+              <div className="font-semibold text-slate-800">{verIndicador.nome}</div>
+              <div className="text-slate-500">{fmtTelefone(verIndicador.telefone)}</div>
             </Card>
             <div>
               <span className="block text-xs font-medium text-slate-600 mb-1">Chave PIX</span>
               <div className="flex gap-2">
                 <div className="flex-1 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm truncate">
-                  {(verIndicador as any).revendedores?.chave_pix || 'Não cadastrada'}
+                  {verIndicador.chave_pix || 'Não cadastrada'}
                 </div>
-                <Btn
-                  size="sm" variant="secondary"
-                  onClick={() => copiarPix((verIndicador as any).revendedores?.chave_pix)}
-                >
+                <Btn size="sm" variant="secondary" onClick={() => copiarPix(verIndicador.chave_pix)}>
                   <Copy size={14} /> Copiar
                 </Btn>
               </div>
               <p className="text-[11px] text-slate-400 mt-2">
-                Faça o PIX manualmente pelo app do seu banco e depois marque a comissão como paga.
+                Faça o PIX manualmente pelo app do seu banco e depois marque cada comissão como paga na lista
+                de clientes dele.
               </p>
             </div>
           </div>

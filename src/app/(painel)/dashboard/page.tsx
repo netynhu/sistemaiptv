@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Badge, Card, Carregando, PageTitle, Td, Th, Vazio } from '@/components/ui';
-import { diasAte, fmtData, fmtMoeda, fmtTelefone, mesAtualISO } from '@/lib/utils';
+import { diasAte, fmtData, fmtMoeda, fmtTelefone, mesAtualISO, nomeComUsuario } from '@/lib/utils';
 import type { Cliente } from '@/types';
 import {
   AlertTriangle, CalendarClock, DollarSign, Receipt, TrendingUp, Users, Wallet, Handshake,
@@ -170,7 +170,7 @@ export default function DashboardPage() {
                     const dias = diasAte(c.data_vencimento)!;
                     return (
                       <tr key={c.id}>
-                        <Td className="font-medium">{c.nome}</Td>
+                        <Td className="font-medium">{nomeComUsuario(c.nome, c.usuario)}</Td>
                         <Td>{fmtTelefone(c.telefone)}</Td>
                         <Td>{(c as any).planos?.nome ?? '—'}</Td>
                         <Td>{fmtData(c.data_vencimento)}</Td>
