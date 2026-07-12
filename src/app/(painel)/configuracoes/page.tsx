@@ -31,7 +31,7 @@ export default function ConfiguracoesPage() {
   });
   const [avisos, setAvisos] = useState<AvisosConfig>({ grupo_whatsapp_id: '' });
   const [telasConfig, setTelasConfig] = useState<{ custo_por_tela: string }>({ custo_por_tela: '1.5' });
-  const [ia, setIa] = useState<AgenteIAConfig>({ habilitado: false, provider: 'anthropic', api_key: '', model: '', auto_resposta: true, prompt_sistema: '' });
+  const [ia, setIa] = useState<AgenteIAConfig>({ habilitado: false, api_key: '', model: '', auto_resposta: true, prompt_sistema: '' });
   const [mensagens, setMensagens] = useState<MensagensConfig>({
     cobranca: '', atraso: '', boas_vindas: '',
     cobranca_botao: true, atraso_botao: true, texto_botao_pix: 'Copiar código PIX',
@@ -397,18 +397,15 @@ export default function ConfiguracoesPage() {
                 <Toggle label="Responder automaticamente novas mensagens" checked={ia.auto_resposta} onChange={(v) => setIa({ ...ia, auto_resposta: v })} />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Select label="Provedor" value={ia.provider} onChange={(e) => setIa({ ...ia, provider: e.target.value as any, model: '' })}>
-                  <option value="anthropic">Anthropic (Claude)</option>
-                  <option value="openai">OpenAI (GPT)</option>
-                </Select>
                 <Input
-                  label="Modelo"
-                  placeholder={ia.provider === 'anthropic' ? 'claude-haiku-4-5-20251001' : 'gpt-4o-mini'}
+                  label="Modelo (OpenAI)"
+                  placeholder="gpt-4o-mini"
                   value={ia.model}
                   onChange={(e) => setIa({ ...ia, model: e.target.value })}
+                  hint="Ex.: gpt-4o-mini (rápido e barato) ou gpt-4o"
                 />
+                <Input label="Chave de API da OpenAI" type="password" value={ia.api_key} onChange={(e) => setIa({ ...ia, api_key: e.target.value })} placeholder="sk-..." />
               </div>
-              <Input label="Chave de API" type="password" value={ia.api_key} onChange={(e) => setIa({ ...ia, api_key: e.target.value })} />
               <TextArea
                 label="Prompt do sistema (personalidade extra do agente)"
                 value={ia.prompt_sistema}

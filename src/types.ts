@@ -158,7 +158,6 @@ export type AvisosConfig = {
 
 export type AgenteIAConfig = {
   habilitado: boolean;
-  provider: 'anthropic' | 'openai';
   api_key: string;
   model: string;
   auto_resposta: boolean;

@@ -4,6 +4,7 @@
 
 import { createAdminClient } from '@/lib/supabase/server';
 import { getSetting } from '@/lib/settings';
+import { sincronizarDespesaAssistPlus } from '@/lib/despesas';
 import { diasAte, fmtData } from '@/lib/utils';
 import type { AgenteIAConfig, Cliente, LinksPadrao } from '@/types';
 
@@ -129,40 +130,10 @@ export async function gerarRespostaIA(
   const msgs = historico.slice(-12).filter((m) => m.content?.trim());
   if (msgs.length === 0) return VAZIO;
 
-  if (cfg.provider === 'openai') {
-    // OpenAI recebe todo o contexto do cliente, mas sem ferramentas (transferência/atualização
-    // automáticas só no provedor Anthropic, que é o padrão).
-    const texto = await responderOpenAI(cfg, system, msgs);
-    return { resposta: texto, escalar: null, atualizouAparelho: null };
-  }
-
-  return responderAnthropic(cfg, system, msgs, cliente);
+  return responderOpenAI(cfg, system, msgs, cliente);
 }
 
-async function responderOpenAI(cfg: AgenteIAConfig, system: string, msgs: MensagemIA[]): Promise<string | null> {
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${cfg.api_key}`,
-    },
-    body: JSON.stringify({
-      model: cfg.model || 'gpt-4o-mini',
-      max_tokens: 800,
-      messages: [{ role: 'system', content: system }, ...msgs],
-    }),
-  });
-  if (!res.ok) throw new Error(`OpenAI respondeu ${res.status}: ${await res.text()}`);
-  const data = await res.json();
-  return data.choices?.[0]?.message?.content ?? null;
-}
-
-type BlocoAnthropic =
-  | { type: 'text'; text: string }
-  | { type: 'tool_use'; id: string; name: string; input: any }
-  | { type: string; [k: string]: any };
-
-async function responderAnthropic(
+async function responderOpenAI(
   cfg: AgenteIAConfig,
   system: string,
   msgs: MensagemIA[],
@@ -170,86 +141,88 @@ async function responderAnthropic(
 ): Promise<ResultadoIA> {
   const tools: any[] = [
     {
-      name: 'transferir_para_humano',
-      description:
-        'Transfere o atendimento para um atendente humano. Use quando não conseguir resolver, quando o cliente pedir para falar com alguém, ou quando o assunto for financeiro/pagamento/renovação/cancelamento/troca de plano.',
-      input_schema: {
-        type: 'object',
-        properties: {
-          motivo: {
-            type: 'string',
-            description: 'Resumo curto do motivo da transferência e do que o cliente precisa, para o atendente humano se situar.',
+      type: 'function',
+      function: {
+        name: 'transferir_para_humano',
+        description:
+          'Transfere o atendimento para um atendente humano. Use quando não conseguir resolver, quando o cliente pedir para falar com alguém, ou quando o assunto for financeiro/pagamento/renovação/cancelamento/troca de plano.',
+        parameters: {
+          type: 'object',
+          properties: {
+            motivo: {
+              type: 'string',
+              description: 'Resumo curto do motivo da transferência e do que o cliente precisa, para o atendente humano se situar.',
+            },
           },
+          required: ['motivo'],
         },
-        required: ['motivo'],
       },
     },
   ];
   // Só oferece a atualização de cadastro se o cliente estiver identificado.
   if (cliente) {
     tools.push({
-      name: 'atualizar_aparelho_cliente',
-      description:
-        'Atualiza o dispositivo e o aplicativo principal do cliente no cadastro. Use quando o cliente informar que trocou de aparelho ou passou a usar outro app. Use exatamente os nomes que aparecem na base de conhecimento.',
-      input_schema: {
-        type: 'object',
-        properties: {
-          dispositivo: { type: 'string', description: 'Nome do novo dispositivo (ex.: "TV Smart LG", "Fire Stick / Fire TV", "Celular Android").' },
-          aplicativo: { type: 'string', description: 'Nome do app principal que ele passará a usar nesse dispositivo.' },
+      type: 'function',
+      function: {
+        name: 'atualizar_aparelho_cliente',
+        description:
+          'Atualiza o dispositivo e o aplicativo principal do cliente no cadastro. Use quando o cliente informar que trocou de aparelho ou passou a usar outro app. Use exatamente os nomes que aparecem na base de conhecimento.',
+        parameters: {
+          type: 'object',
+          properties: {
+            dispositivo: { type: 'string', description: 'Nome do novo dispositivo (ex.: "TV Smart LG", "Fire Stick / Fire TV", "Celular Android").' },
+            aplicativo: { type: 'string', description: 'Nome do app principal que ele passará a usar nesse dispositivo.' },
+          },
+          required: ['dispositivo', 'aplicativo'],
         },
-        required: ['dispositivo', 'aplicativo'],
       },
     });
   }
 
-  const messages: any[] = msgs.map((m) => ({ role: m.role, content: m.content }));
+  const messages: any[] = [{ role: 'system', content: system }, ...msgs.map((m) => ({ role: m.role, content: m.content }))];
   let escalar: ResultadoIA['escalar'] = null;
   let atualizou: ResultadoIA['atualizouAparelho'] = null;
 
   // Loop agêntico: executa ferramentas e realimenta o resultado até o modelo produzir a resposta final.
   for (let i = 0; i < 5; i++) {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': cfg.api_key,
-        'anthropic-version': '2023-06-01',
+        Authorization: `Bearer ${cfg.api_key}`,
       },
       body: JSON.stringify({
-        model: cfg.model || 'claude-haiku-4-5-20251001',
+        model: cfg.model || 'gpt-4o-mini',
         max_tokens: 800,
-        system,
-        tools,
         messages,
+        tools,
+        tool_choice: 'auto',
       }),
     });
-    if (!res.ok) throw new Error(`Anthropic respondeu ${res.status}: ${await res.text()}`);
+    if (!res.ok) throw new Error(`OpenAI respondeu ${res.status}: ${await res.text()}`);
     const data = await res.json();
-    const content: BlocoAnthropic[] = Array.isArray(data.content) ? data.content : [];
+    const choice = data.choices?.[0]?.message;
+    const toolCalls: Array<{ id: string; function: { name: string; arguments: string } }> = choice?.tool_calls ?? [];
 
-    const textos = content.filter((b) => b.type === 'text').map((b: any) => b.text as string);
-    const toolUses = content.filter((b) => b.type === 'tool_use') as Array<{ id: string; name: string; input: any }>;
-
-    if (toolUses.length === 0) {
-      const resposta = textos.join('\n').trim();
+    if (!toolCalls.length) {
+      const resposta = (choice?.content ?? '').trim();
       return { resposta: resposta || null, escalar, atualizouAparelho: atualizou };
     }
 
-    // Precisa devolver a mensagem do assistente (com os tool_use) antes dos tool_result
-    messages.push({ role: 'assistant', content });
+    // Precisa devolver a mensagem do assistente (com os tool_calls) antes das respostas das ferramentas
+    messages.push(choice);
 
-    const toolResults: any[] = [];
-    for (const tu of toolUses) {
-      if (tu.name === 'transferir_para_humano') {
-        escalar = { motivo: String(tu.input?.motivo ?? '').trim() || 'Cliente precisa de atendimento humano.' };
-        toolResults.push({
-          type: 'tool_result',
-          tool_use_id: tu.id,
-          content: 'Transferência registrada. Diga ao cliente, de forma acolhedora e breve, que um atendente humano vai continuar o atendimento em instantes.',
-        });
-      } else if (tu.name === 'atualizar_aparelho_cliente' && cliente) {
-        const dispositivo = String(tu.input?.dispositivo ?? '').trim();
-        const aplicativo = String(tu.input?.aplicativo ?? '').trim();
+    for (const tc of toolCalls) {
+      let args: any = {};
+      try { args = JSON.parse(tc.function?.arguments || '{}'); } catch { /* ignora argumentos inválidos */ }
+      let content = 'Ferramenta indisponível.';
+
+      if (tc.function?.name === 'transferir_para_humano') {
+        escalar = { motivo: String(args.motivo ?? '').trim() || 'Cliente precisa de atendimento humano.' };
+        content = 'Transferência registrada. Diga ao cliente, de forma acolhedora e breve, que um atendente humano vai continuar o atendimento em instantes.';
+      } else if (tc.function?.name === 'atualizar_aparelho_cliente' && cliente) {
+        const dispositivo = String(args.dispositivo ?? '').trim();
+        const aplicativo = String(args.aplicativo ?? '').trim();
         if (dispositivo && aplicativo) {
           const admin = createAdminClient();
           const { error } = await admin
@@ -257,23 +230,20 @@ async function responderAnthropic(
             .update({ dispositivo, aplicativo })
             .eq('id', cliente.id);
           if (error) {
-            toolResults.push({ type: 'tool_result', tool_use_id: tu.id, is_error: true, content: `Não foi possível atualizar o cadastro: ${error.message}` });
+            content = `Não foi possível atualizar o cadastro: ${error.message}`;
           } else {
+            // Mantém em Financeiro > Despesas o custo de telas do Assist Plus deste cliente
+            await sincronizarDespesaAssistPlus(cliente.id).catch((e) => console.error('Erro ao sincronizar despesa Assist Plus:', e));
             atualizou = { dispositivo, aplicativo };
-            toolResults.push({
-              type: 'tool_result',
-              tool_use_id: tu.id,
-              content: `Cadastro atualizado: dispositivo "${dispositivo}", app principal "${aplicativo}". Agora oriente a instalação nesse app usando a base de conhecimento.`,
-            });
+            content = `Cadastro atualizado: dispositivo "${dispositivo}", app principal "${aplicativo}". Agora oriente a instalação nesse app usando a base de conhecimento.`;
           }
         } else {
-          toolResults.push({ type: 'tool_result', tool_use_id: tu.id, is_error: true, content: 'Informe o dispositivo e o aplicativo para atualizar.' });
+          content = 'Informe o dispositivo e o aplicativo para atualizar.';
         }
-      } else {
-        toolResults.push({ type: 'tool_result', tool_use_id: tu.id, is_error: true, content: 'Ferramenta indisponível.' });
       }
+
+      messages.push({ role: 'tool', tool_call_id: tc.id, content });
     }
-    messages.push({ role: 'user', content: toolResults });
   }
 
   // Se esgotou o loop sem resposta final, ao menos preserva ações executadas.

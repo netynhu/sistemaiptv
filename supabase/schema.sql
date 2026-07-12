@@ -269,9 +269,8 @@ insert into public.settings (chave, valor) values
   }'::jsonb),
   ('agente_ia', '{
     "habilitado": false,
-    "provider": "anthropic",
     "api_key": "",
-    "model": "claude-haiku-4-5-20251001",
+    "model": "gpt-4o-mini",
     "auto_resposta": true,
     "prompt_sistema": "Você é o atendente virtual da TvAlfenas, um serviço de TV por assinatura (IPTV). Fale como um atendente humano simpático: mensagens curtas, calorosas e diretas, em português do Brasil, com no máximo 1 ou 2 emojis por mensagem."
   }'::jsonb),
