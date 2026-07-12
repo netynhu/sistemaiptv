@@ -409,16 +409,6 @@ export default function ReceitasPage() {
                                 {gerandoGateway === c.id ? '…' : 'Asaas'}
                               </button>
                             )}
-                            {pagamentosCfg?.mercadopago_token && (
-                              <button
-                                onClick={() => gerarGateway(c, 'mercadopago')}
-                                disabled={gerandoGateway === c.id}
-                                className="text-[11px] px-2 py-1 rounded border border-slate-300 text-slate-600 hover:bg-slate-50"
-                                title="Gerar cobrança PIX real no Mercado Pago"
-                              >
-                                {gerandoGateway === c.id ? '…' : 'MP'}
-                              </button>
-                            )}
                           </>
                         )}
                         <Btn

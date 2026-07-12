@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { getSetting } from '@/lib/settings';
-import { enviarCobrancaWhatsApp } from '@/lib/cobranca';
+import { enviarCobrancaWhatsApp, type MensagensConfig } from '@/lib/cobranca';
 import type { Cobranca, PagamentosConfig, UazapiConfig } from '@/types';
 
 export async function POST(req: NextRequest) {
@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
 
     const [uazapi, mensagens, pagamentos] = await Promise.all([
       getSetting<UazapiConfig>('uazapi'),
-      getSetting<{ cobranca: string; atraso: string; boas_vindas: string }>('mensagens'),
+      getSetting<MensagensConfig>('mensagens'),
       getSetting<PagamentosConfig>('pagamentos'),
     ]);
     if (!uazapi?.server_url || !uazapi?.instance_token) {

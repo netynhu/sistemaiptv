@@ -103,10 +103,11 @@ export async function sendText(cfg: UazapiConfig, number: string, text: string) 
   return uaz(cfg, '/send/text', { auth: 'instance', body: { number, text } });
 }
 
-// Envia mensagem de texto com um botão de "copiar código PIX" (endpoint /send/pix-button
-// da Uazapi). A documentação pública dessa rota é limitada, então isso tenta o formato mais
-// comum e, se falhar por qualquer motivo, cai para uma mensagem de texto simples — a cobrança
-// nunca deixa de ser enviada por causa disso.
+// Envia mensagem de texto com um botão nativo de "copiar código" via /send/menu (type:
+// "button"), usando o formato "texto|copy:codigo" documentado pela Uazapi. Não usamos o
+// endpoint /send/pix-button porque ele serve para uma chave PIX estática do recebedor
+// (CPF/CNPJ/telefone/email/EVP) — aqui o código pode ser um "copia e cola" dinâmico gerado
+// pelo Asaas/Mercado Pago, que não é uma chave PIX válida.
 export async function sendPixButton(
   cfg: UazapiConfig,
   number: string,
@@ -115,12 +116,13 @@ export async function sendPixButton(
   pixButtonText = 'Copiar código PIX'
 ) {
   try {
-    return await uaz(cfg, '/send/pix-button', {
+    return await uaz(cfg, '/send/menu', {
       auth: 'instance',
-      body: { number, text, pixKey: pixCode, key: pixCode, buttonText: pixButtonText },
+      body: { number, type: 'button', text, choices: [`${pixButtonText}|copy:${pixCode}`] },
     });
-  } catch {
-    // Endpoint indisponível/formato diferente no seu servidor — garante que a mensagem chegue.
+  } catch (err) {
+    // Garante que a cobrança chegue mesmo se o botão falhar, mas registra o erro para diagnóstico.
+    console.error('Falha ao enviar botão de copiar PIX via Uazapi, caindo para texto simples:', err);
     return sendText(cfg, number, text);
   }
 }

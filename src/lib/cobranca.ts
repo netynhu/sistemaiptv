@@ -6,7 +6,14 @@ import { sendPixButton, sendText } from '@/lib/uazapi';
 import { aplicarTemplate, diasAte, fmtData, fmtMoeda } from '@/lib/utils';
 import type { Cobranca, PagamentosConfig, UazapiConfig } from '@/types';
 
-type MensagensConfig = { cobranca: string; atraso: string; boas_vindas: string };
+export type MensagensConfig = {
+  cobranca: string;
+  atraso: string;
+  boas_vindas: string;
+  cobranca_botao?: boolean;
+  atraso_botao?: boolean;
+  texto_botao_pix?: string;
+};
 
 const TEMPLATE_COBRANCA_PADRAO =
   'Olá {nome}! 👋 Sua assinatura vence em {vencimento}. Valor: {valor}. PIX: {pix}';
@@ -34,6 +41,7 @@ export async function enviarCobrancaWhatsApp(
   // Se já existe uma cobrança PIX real gerada (Asaas/Mercado Pago), usa o código dela;
   // senão cai para a chave PIX estática configurada.
   const pixCode = cobranca.pix_copia_cola || pagamentos?.chave_pix || '';
+  const usarBotao = atrasada ? (mensagens?.atraso_botao ?? true) : (mensagens?.cobranca_botao ?? true);
 
   const texto = aplicarTemplate(template, {
     nome: destinatario.nome ?? '',
@@ -43,8 +51,8 @@ export async function enviarCobrancaWhatsApp(
     pix: pixCode || '(chave PIX não configurada)',
   });
 
-  if (pixCode) {
-    await sendPixButton(uazapi, telefone, texto, pixCode);
+  if (pixCode && usarBotao) {
+    await sendPixButton(uazapi, telefone, texto, pixCode, mensagens?.texto_botao_pix || undefined);
   } else {
     await sendText(uazapi, telefone, texto);
   }

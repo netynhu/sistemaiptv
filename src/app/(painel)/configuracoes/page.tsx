@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client';
 import {
   Btn, Badge, Card, Carregando, Input, PageTitle, Select, TextArea, Toggle, toast,
 } from '@/components/ui';
+import type { MensagensConfig } from '@/lib/cobranca';
 import type {
   AgenteIAConfig, AvisosConfig, LinksPadrao, PagamentosConfig, Plano, UazapiConfig,
 } from '@/types';
@@ -37,7 +38,10 @@ export default function ConfiguracoesPage() {
   const [avisos, setAvisos] = useState<AvisosConfig>({ grupo_whatsapp_id: '' });
   const [telasConfig, setTelasConfig] = useState<{ custo_por_tela: string }>({ custo_por_tela: '1.5' });
   const [ia, setIa] = useState<AgenteIAConfig>({ habilitado: false, provider: 'anthropic', api_key: '', model: '', auto_resposta: true, prompt_sistema: '' });
-  const [mensagens, setMensagens] = useState<{ cobranca: string; atraso: string; boas_vindas: string }>({ cobranca: '', atraso: '', boas_vindas: '' });
+  const [mensagens, setMensagens] = useState<MensagensConfig>({
+    cobranca: '', atraso: '', boas_vindas: '',
+    cobranca_botao: true, atraso_botao: true, texto_botao_pix: 'Copiar código PIX',
+  });
   const [comissaoPadrao, setComissaoPadrao] = useState<{ tipo: string; valor: string }>({ tipo: 'fixo', valor: '' });
   const [revendaPadrao, setRevendaPadrao] = useState<{ valor_por_acesso: string }>({ valor_por_acesso: '' });
 
@@ -454,18 +458,40 @@ export default function ConfiguracoesPage() {
         <div className="space-y-5 max-w-2xl">
           <Card title="Modelos de mensagem (WhatsApp)">
             <div className="space-y-3">
-              <TextArea
-                label="Mensagem de cobrança (vence hoje)"
-                rows={7}
-                value={mensagens.cobranca}
-                onChange={(e) => setMensagens({ ...mensagens, cobranca: e.target.value })}
-              />
-              <TextArea
-                label="Mensagem de atraso (enviada automaticamente no dia seguinte ao vencimento)"
-                rows={7}
-                value={mensagens.atraso}
-                onChange={(e) => setMensagens({ ...mensagens, atraso: e.target.value })}
-              />
+              <div className="space-y-2">
+                <TextArea
+                  label="Mensagem de cobrança (vence hoje)"
+                  rows={7}
+                  value={mensagens.cobranca}
+                  onChange={(e) => setMensagens({ ...mensagens, cobranca: e.target.value })}
+                />
+                <Toggle
+                  label="Enviar com botão de copiar PIX"
+                  checked={mensagens.cobranca_botao ?? true}
+                  onChange={(v) => setMensagens({ ...mensagens, cobranca_botao: v })}
+                />
+              </div>
+              <div className="space-y-2">
+                <TextArea
+                  label="Mensagem de atraso (enviada automaticamente no dia seguinte ao vencimento)"
+                  rows={7}
+                  value={mensagens.atraso}
+                  onChange={(e) => setMensagens({ ...mensagens, atraso: e.target.value })}
+                />
+                <Toggle
+                  label="Enviar com botão de copiar PIX"
+                  checked={mensagens.atraso_botao ?? true}
+                  onChange={(v) => setMensagens({ ...mensagens, atraso_botao: v })}
+                />
+              </div>
+              {(mensagens.cobranca_botao ?? true) || (mensagens.atraso_botao ?? true) ? (
+                <Input
+                  label="Texto do botão de copiar PIX"
+                  value={mensagens.texto_botao_pix ?? ''}
+                  onChange={(e) => setMensagens({ ...mensagens, texto_botao_pix: e.target.value })}
+                  placeholder="Copiar código PIX"
+                />
+              ) : null}
               <TextArea
                 label="Mensagem de boas-vindas"
                 rows={4}
@@ -473,7 +499,9 @@ export default function ConfiguracoesPage() {
                 onChange={(e) => setMensagens({ ...mensagens, boas_vindas: e.target.value })}
               />
               <p className="text-xs text-slate-400">
-                Variáveis disponíveis: {'{nome}'}, {'{valor}'}, {'{vencimento}'}, {'{descricao}'} e {'{pix}'}.
+                Variáveis disponíveis: {'{nome}'}, {'{valor}'}, {'{vencimento}'}, {'{descricao}'} e {'{pix}'}. O botão de
+                copiar PIX é enviado junto com a mensagem quando há um código PIX disponível (gerado no Asaas/Mercado
+                Pago ou a chave PIX fixa em Pagamentos).
               </p>
             </div>
           </Card>
