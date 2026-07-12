@@ -13,7 +13,6 @@ type Resumo = {
   receitaRevendas: number;
   despesas: number;
   comissoesGeradas: number;
-  comissoesPagas: number;
   novosClientes: number;
   cancelamentos: number;
   porForma: Record<string, number>;
@@ -36,11 +35,10 @@ export default function RelatoriosPage() {
       const fim = new Date(y, m, 0).toISOString().slice(0, 10);
       const fimTs = `${fim}T23:59:59`;
 
-      const [cobPagas, desp, comGeradas, comPagas, novos, cancelados, telas] = await Promise.all([
+      const [cobPagas, desp, comGeradas, novos, cancelados, telas] = await Promise.all([
         supabase.from('cobrancas').select('valor, tipo, forma_pagamento').eq('status', 'pago').gte('pago_em', inicio).lte('pago_em', fim),
         supabase.from('despesas').select('valor, categoria').gte('data', inicio).lte('data', fim),
         supabase.from('comissoes').select('valor').gte('criado_em', inicio).lte('criado_em', fimTs),
-        supabase.from('comissoes').select('valor').eq('status', 'pago').gte('pago_em', inicio).lte('pago_em', fim),
         supabase.from('clientes').select('id').gte('data_ativacao', inicio).lte('data_ativacao', fim),
         supabase.from('clientes').select('id').eq('status', 'cancelado').gte('criado_em', inicio),
         supabase.from('clientes').select('aplicativo, telas_apps').eq('status', 'ativo'),
@@ -57,6 +55,12 @@ export default function RelatoriosPage() {
         porCategoria[d.categoria] = (porCategoria[d.categoria] ?? 0) + Number(d.valor);
       }
 
+      // Comissões de indicação também são despesa (dinheiro pago para fora)
+      const comissoesGeradasValor = (comGeradas.data ?? []).reduce((s, c) => s + Number(c.valor), 0);
+      if (comissoesGeradasValor > 0) {
+        porCategoria['Comissões de indicação'] = comissoesGeradasValor;
+      }
+
       // O dispositivo/app principal do cliente já conta como a 1ª tela dele
       const todasTelas = (telas.data ?? []).flatMap((c: any) =>
         [c.aplicativo, ...((c.telas_apps as string[]) ?? [])].filter(Boolean)
@@ -65,9 +69,8 @@ export default function RelatoriosPage() {
       setResumo({
         receitaClientes: pagas.filter((c) => c.tipo === 'cliente').reduce((s, c) => s + Number(c.valor), 0),
         receitaRevendas: pagas.filter((c) => c.tipo === 'revendedor').reduce((s, c) => s + Number(c.valor), 0),
-        despesas: (desp.data ?? []).reduce((s, d) => s + Number(d.valor), 0),
-        comissoesGeradas: (comGeradas.data ?? []).reduce((s, c) => s + Number(c.valor), 0),
-        comissoesPagas: (comPagas.data ?? []).reduce((s, c) => s + Number(c.valor), 0),
+        despesas: (desp.data ?? []).reduce((s, d) => s + Number(d.valor), 0) + comissoesGeradasValor,
+        comissoesGeradas: comissoesGeradasValor,
         novosClientes: novos.data?.length ?? 0,
         cancelamentos: cancelados.data?.length ?? 0,
         porForma,
@@ -129,9 +132,9 @@ export default function RelatoriosPage() {
               <span>Mensalidades de revendedores</span>
               <b>{fmtMoeda(resumo.receitaRevendas)}</b>
             </li>
-            <li className="flex justify-between border-t border-slate-100 pt-2">
-              <span>Comissões pagas no mês</span>
-              <b className="text-rose-600">− {fmtMoeda(resumo.comissoesPagas)}</b>
+            <li className="flex justify-between border-t border-slate-100 pt-2 font-medium">
+              <span>Total</span>
+              <b>{fmtMoeda(resumo.receitaClientes + resumo.receitaRevendas)}</b>
             </li>
           </ul>
         </Card>

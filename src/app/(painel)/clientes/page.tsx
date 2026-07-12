@@ -14,7 +14,7 @@ const APP_ASSIST_PLUS = 'Assist Plus';
 
 const FORM_VAZIO = {
   nome: '', telefone: '', usuario: '', senha: '', plano_id: '', valor: '',
-  m3u_link: '', dispositivo: '', aplicativo: '', telas_apps: [] as string[], revendedor_id: '',
+  dispositivo: '', aplicativo: '', telas_apps: [] as string[], revendedor_id: '',
   data_ativacao: hojeISO(), data_vencimento: '', status: 'ativo', observacoes: '',
 };
 
@@ -71,7 +71,7 @@ export default function ClientesPage() {
     setEditandoId(c.id);
     setForm({
       nome: c.nome, telefone: c.telefone ?? '', usuario: c.usuario ?? '', senha: c.senha ?? '',
-      plano_id: c.plano_id ?? '', valor: String(c.valor ?? ''), m3u_link: c.m3u_link ?? '',
+      plano_id: c.plano_id ?? '', valor: String(c.valor ?? ''),
       dispositivo: c.dispositivo ?? '', aplicativo: c.aplicativo ?? '', telas_apps: c.telas_apps ?? [],
       revendedor_id: c.revendedor_id ?? '', data_ativacao: c.data_ativacao,
       data_vencimento: c.data_vencimento ?? '', status: c.status, observacoes: c.observacoes ?? '',
@@ -144,7 +144,6 @@ export default function ClientesPage() {
       senha: form.senha || null,
       plano_id: form.plano_id || null,
       valor,
-      m3u_link: form.m3u_link || null,
       dispositivo: form.dispositivo || null,
       aplicativo: form.aplicativo || null,
       telas_apps: telasApps,
@@ -203,7 +202,7 @@ export default function ClientesPage() {
   }
 
   function linkM3UDoCliente(c: Cliente): string {
-    return resolverLinkM3U(c.m3u_link || links?.m3u, c.usuario, c.senha);
+    return resolverLinkM3U(links?.m3u, c.usuario, c.senha);
   }
 
   function copiarAcesso(c: Cliente) {
@@ -404,17 +403,17 @@ export default function ClientesPage() {
           <Input label="Usuário" value={form.usuario} onChange={(e) => setForm({ ...form, usuario: e.target.value })} />
           <Input label="Senha" value={form.senha} onChange={(e) => setForm({ ...form, senha: e.target.value })} />
 
-          {resolverLinkM3U(form.m3u_link || links?.m3u, form.usuario, form.senha) && (
+          {resolverLinkM3U(links?.m3u, form.usuario, form.senha) && (
             <div className="sm:col-span-2">
               <span className="block text-xs font-medium text-slate-600 mb-1">Link M3U deste usuário</span>
               <div className="flex gap-2">
                 <div className="flex-1 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs truncate">
-                  {resolverLinkM3U(form.m3u_link || links?.m3u, form.usuario, form.senha)}
+                  {resolverLinkM3U(links?.m3u, form.usuario, form.senha)}
                 </div>
                 <Btn
                   type="button" size="sm" variant="secondary"
                   onClick={() => {
-                    navigator.clipboard.writeText(resolverLinkM3U(form.m3u_link || links?.m3u, form.usuario, form.senha));
+                    navigator.clipboard.writeText(resolverLinkM3U(links?.m3u, form.usuario, form.senha));
                     toast('Link M3U copiado.');
                   }}
                 >
@@ -502,14 +501,6 @@ export default function ClientesPage() {
               <option key={r.id} value={r.id}>🤝 {r.nome}</option>
             ))}
           </Select>
-          <Input
-            label="Link M3U (só se for diferente do padrão)"
-            className="sm:col-span-2"
-            placeholder={links?.m3u ? `Padrão: ${links.m3u}` : 'Deixe vazio para usar o link padrão das Configurações'}
-            value={form.m3u_link}
-            onChange={(e) => setForm({ ...form, m3u_link: e.target.value })}
-            hint="Deixe vazio na maioria dos casos — o link padrão já usa {{usuario}} e {{senha}} deste cliente automaticamente."
-          />
           <Select label="Status" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
             <option value="ativo">Ativo</option>
             <option value="suspenso">Suspenso</option>

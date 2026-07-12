@@ -30,7 +30,6 @@ export type Cliente = {
   senha: string | null;
   plano_id: string | null;
   valor: number;
-  m3u_link: string | null;
   dispositivo: string | null;
   aplicativo: string | null;
   telas_apps: string[];
