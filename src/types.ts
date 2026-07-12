@@ -82,6 +82,7 @@ export type Despesa = {
   pago_em: string | null;
   cliente_id: string | null;
   observacoes: string | null;
+  clientes?: Pick<Cliente, 'nome' | 'usuario'> | null;
 };
 
 export type Conversa = {

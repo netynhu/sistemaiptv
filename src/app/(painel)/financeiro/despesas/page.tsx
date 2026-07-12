@@ -44,7 +44,7 @@ export default function DespesasPage() {
     const fim = new Date(y, m, 0).toISOString().slice(0, 10);
     const { data } = await supabase
       .from('despesas')
-      .select('*')
+      .select('*, clientes(nome, usuario)')
       .gte('data', inicio)
       .lte('data', fim)
       .order('data', { ascending: false });
@@ -132,6 +132,19 @@ export default function DespesasPage() {
     carregarDespesas();
   }
 
+  async function pagarTodasDespesas(itens: Despesa[]) {
+    const pendentes = itens.filter((d) => !d.pago);
+    if (pendentes.length === 0) return;
+    if (!confirm(`Marcar ${pendentes.length} despesa(s) como paga(s)?`)) return;
+    const { error } = await supabase
+      .from('despesas')
+      .update({ pago: true, pago_em: hojeISO() })
+      .in('id', pendentes.map((d) => d.id));
+    if (error) return toast(`Erro: ${error.message}`, 'erro');
+    toast(`${pendentes.length} despesa(s) marcada(s) como paga(s).`);
+    carregarDespesas();
+  }
+
   async function marcarComissaoPaga(cm: Comissao) {
     const { error } = await supabase
       .from('comissoes')
@@ -142,8 +155,21 @@ export default function DespesasPage() {
     carregarComissoes();
   }
 
-  function alternarGrupo(indicadorId: string) {
-    setAbertos((a) => ({ ...a, [indicadorId]: !a[indicadorId] }));
+  async function pagarTodasComissoes(nome: string, itens: Comissao[]) {
+    const pendentes = itens.filter((c) => c.status === 'pendente');
+    if (pendentes.length === 0) return;
+    if (!confirm(`Marcar ${pendentes.length} comissão(ões) pendente(s) de ${nome} como paga(s)?`)) return;
+    const { error } = await supabase
+      .from('comissoes')
+      .update({ status: 'pago', pago_em: hojeISO() })
+      .in('id', pendentes.map((c) => c.id));
+    if (error) return toast(`Erro: ${error.message}`, 'erro');
+    toast(`${pendentes.length} comissão(ões) marcada(s) como paga(s).`);
+    carregarComissoes();
+  }
+
+  function alternarGrupo(chave: string) {
+    setAbertos((a) => ({ ...a, [chave]: !a[chave] }));
   }
 
   function copiarPix(chave: string | null | undefined) {
@@ -155,6 +181,12 @@ export default function DespesasPage() {
   const totalDespesas = despesas.reduce((s, d) => s + Number(d.valor), 0);
   const totalDespesasPagas = despesas.filter((d) => d.pago).reduce((s, d) => s + Number(d.valor), 0);
   const totalDespesasPendentes = totalDespesas - totalDespesasPagas;
+
+  // As despesas do Assist Plus (uma por cliente) ficam agrupadas num card só, à parte das demais
+  const despesasAssistPlus = despesas.filter((d) => d.categoria === 'Assist Plus');
+  const despesasOutras = despesas.filter((d) => d.categoria !== 'Assist Plus');
+  const assistPlusPendente = despesasAssistPlus.filter((d) => !d.pago).reduce((s, d) => s + Number(d.valor), 0);
+  const assistPlusPago = despesasAssistPlus.filter((d) => d.pago).reduce((s, d) => s + Number(d.valor), 0);
 
   const totalComissoesPendentes = comissoes.filter((c) => c.status === 'pendente').reduce((s, c) => s + Number(c.valor), 0);
   const totalComissoesPagas = comissoes.filter((c) => c.status === 'pago').reduce((s, c) => s + Number(c.valor), 0);
@@ -255,54 +287,138 @@ export default function DespesasPage() {
           ) : despesas.length === 0 ? (
             <Vazio>Nenhuma despesa lançada neste mês.</Vazio>
           ) : (
-            <Tabela>
-              <thead>
-                <tr>
-                  <Th>Data</Th>
-                  <Th>Descrição</Th>
-                  <Th>Categoria</Th>
-                  <Th>Valor</Th>
-                  <Th>Status</Th>
-                  <Th className="text-right">Ações</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {despesas.map((d) => (
-                  <tr key={d.id} className="hover:bg-slate-50">
-                    <Td>{fmtData(d.data)}</Td>
-                    <Td>
-                      <span className="font-medium text-slate-800">{d.descricao}</span>
-                      {d.recorrente && <Badge cor="roxo">Mensal</Badge>}
-                      {d.observacoes && <div className="text-xs text-slate-400">{d.observacoes}</div>}
-                    </Td>
-                    <Td><Badge cor="azul">{d.categoria}</Badge></Td>
-                    <Td className="font-medium">{fmtMoeda(d.valor)}</Td>
-                    <Td>
-                      {d.pago ? (
-                        <Badge cor="verde">Paga {d.pago_em ? `· ${fmtData(d.pago_em)}` : ''}</Badge>
-                      ) : (
-                        <Badge cor="amarelo">Pendente</Badge>
+            <>
+              {despesasAssistPlus.length > 0 && (
+                <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-4">
+                  <div className="flex items-center justify-between gap-3 px-4 py-3">
+                    <button
+                      type="button"
+                      onClick={() => alternarGrupo('assist-plus')}
+                      className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                    >
+                      <ChevronDown size={16} className={cls('shrink-0 text-slate-400 transition-transform', !!abertos['assist-plus'] && 'rotate-180')} />
+                      <div className="min-w-0">
+                        <div className="font-medium text-slate-800 truncate">Assist Plus</div>
+                        <div className="text-xs text-slate-400 flex items-center gap-1">
+                          <Users size={12} /> {despesasAssistPlus.length} cliente{despesasAssistPlus.length > 1 ? 's' : ''}
+                        </div>
+                      </div>
+                    </button>
+                    <div className="flex items-center gap-4 shrink-0">
+                      {assistPlusPago > 0 && (
+                        <div className="text-right hidden sm:block">
+                          <div className="text-[10px] text-slate-400">Pago</div>
+                          <div className="text-sm font-medium text-emerald-600">{fmtMoeda(assistPlusPago)}</div>
+                        </div>
                       )}
-                    </Td>
-                    <Td className="text-right whitespace-nowrap">
-                      <button
-                        onClick={() => alternarPago(d)}
-                        className="p-1.5 text-slate-400 hover:text-emerald-600"
-                        title={d.pago ? 'Marcar como pendente' : 'Marcar como paga'}
-                      >
-                        {d.pago ? <RotateCcw size={16} /> : <CheckCircle2 size={16} />}
-                      </button>
-                      <button onClick={() => abrirEdicao(d)} className="p-1.5 text-slate-400 hover:text-indigo-600" title="Editar">
-                        <Pencil size={16} />
-                      </button>
-                      <button onClick={() => excluir(d)} className="p-1.5 text-slate-400 hover:text-rose-600" title="Excluir">
-                        <Trash2 size={16} />
-                      </button>
-                    </Td>
-                  </tr>
-                ))}
-              </tbody>
-            </Tabela>
+                      <div className="text-right">
+                        <div className="text-[10px] text-slate-400">Pendente</div>
+                        <div className="text-sm font-bold text-slate-900">{fmtMoeda(assistPlusPendente)}</div>
+                      </div>
+                      {assistPlusPendente > 0 && (
+                        <Btn size="sm" variant="success" onClick={() => pagarTodasDespesas(despesasAssistPlus)}>
+                          <CheckCircle2 size={14} /> Pagar tudo
+                        </Btn>
+                      )}
+                    </div>
+                  </div>
+
+                  {!!abertos['assist-plus'] && (
+                    <div className="border-t border-slate-100 overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr>
+                            <Th>Cliente</Th>
+                            <Th>Valor</Th>
+                            <Th>Status</Th>
+                            <Th>Pago em</Th>
+                            <Th className="text-right">Ações</Th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {despesasAssistPlus.map((d) => (
+                            <tr key={d.id} className="hover:bg-slate-50">
+                              <Td>{d.clientes ? nomeComUsuario(d.clientes.nome, d.clientes.usuario) : d.descricao}</Td>
+                              <Td>{fmtMoeda(d.valor)}</Td>
+                              <Td>
+                                {d.pago ? <Badge cor="verde">Paga</Badge> : <Badge cor="amarelo">Pendente</Badge>}
+                              </Td>
+                              <Td>{fmtData(d.pago_em)}</Td>
+                              <Td className="text-right">
+                                {d.pago ? (
+                                  <Btn size="sm" variant="secondary" onClick={() => alternarPago(d)}>
+                                    <RotateCcw size={14} /> Desfazer
+                                  </Btn>
+                                ) : (
+                                  <Btn size="sm" variant="success" onClick={() => alternarPago(d)}>
+                                    <CheckCircle2 size={14} /> Pagar
+                                  </Btn>
+                                )}
+                              </Td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {despesasOutras.length > 0 && (
+                <Tabela>
+                  <thead>
+                    <tr>
+                      <Th>Data</Th>
+                      <Th>Descrição</Th>
+                      <Th>Categoria</Th>
+                      <Th>Valor</Th>
+                      <Th>Status</Th>
+                      <Th className="text-right">Ações</Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {despesasOutras.map((d) => (
+                      <tr key={d.id} className="hover:bg-slate-50">
+                        <Td>{fmtData(d.data)}</Td>
+                        <Td>
+                          <span className="font-medium text-slate-800">{d.descricao}</span>
+                          {d.recorrente && <Badge cor="roxo">Mensal</Badge>}
+                          {d.observacoes && <div className="text-xs text-slate-400">{d.observacoes}</div>}
+                        </Td>
+                        <Td><Badge cor="azul">{d.categoria}</Badge></Td>
+                        <Td className="font-medium">{fmtMoeda(d.valor)}</Td>
+                        <Td>
+                          {d.pago ? (
+                            <Badge cor="verde">Paga {d.pago_em ? `· ${fmtData(d.pago_em)}` : ''}</Badge>
+                          ) : (
+                            <Badge cor="amarelo">Pendente</Badge>
+                          )}
+                        </Td>
+                        <Td className="text-right whitespace-nowrap">
+                          <span className="inline-flex items-center gap-1.5">
+                            {d.pago ? (
+                              <Btn size="sm" variant="secondary" onClick={() => alternarPago(d)}>
+                                <RotateCcw size={14} /> Desfazer
+                              </Btn>
+                            ) : (
+                              <Btn size="sm" variant="success" onClick={() => alternarPago(d)}>
+                                <CheckCircle2 size={14} /> Pagar
+                              </Btn>
+                            )}
+                            <button onClick={() => abrirEdicao(d)} className="p-1.5 text-slate-400 hover:text-indigo-600" title="Editar">
+                              <Pencil size={16} />
+                            </button>
+                            <button onClick={() => excluir(d)} className="p-1.5 text-slate-400 hover:text-rose-600" title="Excluir">
+                              <Trash2 size={16} />
+                            </button>
+                          </span>
+                        </Td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </Tabela>
+              )}
+            </>
           )}
         </>
       ) : (
@@ -372,6 +488,11 @@ export default function DespesasPage() {
                           <div className="text-[10px] text-slate-400">Pendente</div>
                           <div className="text-sm font-bold text-slate-900">{fmtMoeda(g.pendente)}</div>
                         </div>
+                        {g.pendente > 0 && (
+                          <Btn size="sm" variant="success" onClick={() => pagarTodasComissoes(g.indicador.nome, g.itens)}>
+                            <CheckCircle2 size={14} /> Pagar tudo
+                          </Btn>
+                        )}
                         <button
                           onClick={() => setVerIndicador(g.indicador)}
                           className="p-1.5 text-slate-400 hover:text-indigo-600"
@@ -406,7 +527,7 @@ export default function DespesasPage() {
                                 <Td className="text-right">
                                   {cm.status === 'pendente' && (
                                     <Btn size="sm" variant="success" onClick={() => marcarComissaoPaga(cm)}>
-                                      <CheckCircle2 size={14} /> Marcar paga
+                                      <CheckCircle2 size={14} /> Pagar
                                     </Btn>
                                   )}
                                 </Td>
