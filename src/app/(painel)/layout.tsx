@@ -73,8 +73,8 @@ function NavGrupo({
         className={cls(
           'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
           contemAtivo && !aberto
-            ? 'bg-slate-800 text-white'
-            : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+            ? 'bg-white/[0.08] text-white'
+            : 'text-slate-300 hover:bg-white/[0.06] hover:text-white'
         )}
       >
         <Icon size={18} />
@@ -82,7 +82,7 @@ function NavGrupo({
         <ChevronDown size={15} className={cls('transition-transform', aberto && 'rotate-180')} />
       </button>
       {aberto && (
-        <div className="mt-1 ml-4 pl-3 border-l border-slate-700 space-y-1">
+        <div className="mt-1 ml-4 pl-3 border-l border-white/10 space-y-1">
           {grupo.children.map((c) => {
             const ativo = pathname.startsWith(c.href);
             return (
@@ -93,8 +93,8 @@ function NavGrupo({
                 className={cls(
                   'block px-3 py-2 rounded-lg text-sm transition-colors',
                   ativo
-                    ? 'bg-indigo-600 text-white font-medium'
-                    : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                    ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 text-white font-medium shadow-md shadow-indigo-950/50'
+                    : 'text-slate-400 hover:bg-white/[0.06] hover:text-white'
                 )}
               >
                 {c.label}
@@ -142,8 +142,8 @@ export default function PainelLayout({ children }: { children: React.ReactNode }
             className={cls(
               'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
               ativo
-                ? 'bg-indigo-600 text-white'
-                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 text-white shadow-md shadow-indigo-950/50'
+                : 'text-slate-300 hover:bg-white/[0.06] hover:text-white'
             )}
           >
             <Icon size={18} />
@@ -157,9 +157,9 @@ export default function PainelLayout({ children }: { children: React.ReactNode }
   return (
     <div className="min-h-screen flex">
       {/* Sidebar desktop */}
-      <aside className="no-print hidden lg:flex w-60 flex-col bg-slate-900 fixed inset-y-0">
+      <aside className="no-print hidden lg:flex w-60 flex-col bg-gradient-to-b from-slate-900 to-slate-950 fixed inset-y-0 border-r border-white/[0.06]">
         <div className="flex items-center gap-2.5 px-5 py-5">
-          <div className="w-9 h-9 rounded-lg bg-indigo-600 text-white flex items-center justify-center">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white flex items-center justify-center shadow-lg shadow-indigo-900/40">
             <Tv size={20} />
           </div>
           <div>
@@ -180,7 +180,7 @@ export default function PainelLayout({ children }: { children: React.ReactNode }
       {aberto && (
         <div className="no-print fixed inset-0 z-40 lg:hidden">
           <div className="absolute inset-0 bg-slate-900/60" onClick={() => setAberto(false)} />
-          <aside className="absolute inset-y-0 left-0 w-64 bg-slate-900 flex flex-col py-4">
+          <aside className="absolute inset-y-0 left-0 w-64 bg-gradient-to-b from-slate-900 to-slate-950 flex flex-col py-4">
             <div className="flex items-center justify-between px-5 pb-4">
               <span className="text-white font-bold">Sistema IPTV</span>
               <button onClick={() => setAberto(false)} className="text-slate-400">

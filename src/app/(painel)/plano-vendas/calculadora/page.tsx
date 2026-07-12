@@ -2,16 +2,20 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Card, Carregando, Input, PageTitle } from '@/components/ui';
-import { fmtMoeda } from '@/lib/utils';
-import { Target } from 'lucide-react';
+import { Btn, Card, Carregando, Input, PageTitle, toast } from '@/components/ui';
+import { fmtMoeda, mesAtualISO } from '@/lib/utils';
+import { CalendarPlus, Rocket, Target, TrendingUp, Users } from 'lucide-react';
 
 export default function CalculadoraMetaPage() {
   const supabase = useMemo(() => createClient(), []);
   const [carregando, setCarregando] = useState(true);
+  const [salvando, setSalvando] = useState(false);
+
   const [receitaClientesMensal, setReceitaClientesMensal] = useState(0);
   const [receitaRevendasMensal, setReceitaRevendasMensal] = useState(0);
   const [qtdClientesAtivos, setQtdClientesAtivos] = useState(0);
+  const [recebidoMes, setRecebidoMes] = useState(0);
+  const [novosMes, setNovosMes] = useState(0);
 
   const [meta, setMeta] = useState('');
   const [ticketMedio, setTicketMedio] = useState('');
@@ -19,9 +23,15 @@ export default function CalculadoraMetaPage() {
   useEffect(() => {
     (async () => {
       setCarregando(true);
-      const [{ data: clientes }, { data: revendedores }] = await Promise.all([
+      const mes = mesAtualISO();
+      const inicioMes = `${mes}-01`;
+
+      const [{ data: clientes }, { data: revendedores }, { data: pagasMes }, { data: novos }, cfg] = await Promise.all([
         supabase.from('clientes').select('valor, planos(meses)').eq('status', 'ativo'),
         supabase.from('revendedores').select('valor_por_acesso, quantidade_clientes').eq('tipo', 'master').eq('ativo', true),
+        supabase.from('cobrancas').select('valor').eq('status', 'pago').gte('pago_em', inicioMes),
+        supabase.from('clientes').select('id').gte('data_ativacao', inicioMes),
+        supabase.from('settings').select('valor').eq('chave', 'plano_vendas').maybeSingle(),
       ]);
 
       const clientesAtivos = clientes ?? [];
@@ -37,12 +47,35 @@ export default function CalculadoraMetaPage() {
       setReceitaClientesMensal(mensalClientes);
       setReceitaRevendasMensal(mensalRevendas);
       setQtdClientesAtivos(clientesAtivos.length);
+      setRecebidoMes((pagasMes ?? []).reduce((s, c) => s + Number(c.valor), 0));
+      setNovosMes(novos?.length ?? 0);
+
+      // Meta salva (persiste entre sessões — antes ela se perdia ao recarregar)
+      const salva = cfg.data?.valor as { meta_mensal?: number; ticket_medio?: number } | undefined;
+      if (salva?.meta_mensal) setMeta(String(salva.meta_mensal));
 
       const ticket = clientesAtivos.length > 0 ? mensalClientes / clientesAtivos.length : 0;
-      setTicketMedio(ticket ? ticket.toFixed(2) : '');
+      setTicketMedio(
+        salva?.ticket_medio ? String(salva.ticket_medio) : ticket ? ticket.toFixed(2) : ''
+      );
       setCarregando(false);
     })();
   }, [supabase]);
+
+  async function salvarMeta() {
+    setSalvando(true);
+    const { error } = await supabase.from('settings').upsert({
+      chave: 'plano_vendas',
+      valor: {
+        meta_mensal: parseFloat(meta || '0') || 0,
+        ticket_medio: parseFloat(ticketMedio || '0') || 0,
+      },
+      atualizado_em: new Date().toISOString(),
+    });
+    setSalvando(false);
+    if (error) return toast(`Erro ao salvar: ${error.message}`, 'erro');
+    toast('Meta salva — ela fica registrada e acompanha seu progresso todo mês.');
+  }
 
   if (carregando) return <Carregando />;
 
@@ -52,10 +85,71 @@ export default function CalculadoraMetaPage() {
   const falta = Math.max(0, metaNum - receitaAtual);
   const acessosNecessarios = ticketNum > 0 ? Math.ceil(falta / ticketNum) : null;
   const jaBateuMeta = metaNum > 0 && falta === 0;
+  const progresso = metaNum > 0 ? Math.min(100, (receitaAtual / metaNum) * 100) : 0;
+
+  // Ritmo do mês: quantos dias já se passaram e projeção de novos clientes
+  const hoje = new Date();
+  const diaAtual = hoje.getDate();
+  const diasNoMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).getDate();
+  const projecaoNovos = diaAtual > 0 ? Math.round((novosMes / diaAtual) * diasNoMes) : 0;
 
   return (
     <div>
-      <PageTitle title="Calculadora de meta" subtitle="Quantas telas (acessos) faltam vender para chegar na meta desejada" />
+      <PageTitle
+        title="Calculadora de meta"
+        subtitle="Defina sua meta mensal e acompanhe quanto falta — a meta fica salva"
+      />
+
+      {/* Progresso da meta */}
+      {metaNum > 0 && (
+        <div className="mb-5 bg-gradient-to-r from-indigo-600 to-violet-600 rounded-2xl p-5 text-white shadow-lg shadow-indigo-600/20">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <div className="flex items-center gap-2 font-semibold">
+              <Target size={18} /> Meta mensal: {fmtMoeda(metaNum)}
+            </div>
+            <div className="text-sm font-medium">
+              {jaBateuMeta ? 'Meta batida! 🎉' : `${progresso.toFixed(0)}% da meta`}
+            </div>
+          </div>
+          <div className="h-3 rounded-full bg-white/20 overflow-hidden">
+            <div
+              className="h-full rounded-full bg-white transition-all duration-700"
+              style={{ width: `${progresso}%` }}
+            />
+          </div>
+          <div className="flex flex-wrap justify-between gap-2 mt-3 text-sm text-indigo-100">
+            <span>Receita mensal estimada: <b className="text-white">{fmtMoeda(receitaAtual)}</b></span>
+            {!jaBateuMeta && (
+              <span>
+                Faltam <b className="text-white">{fmtMoeda(falta)}</b>
+                {acessosNecessarios !== null && (
+                  <> ≈ <b className="text-white">{acessosNecessarios} tela{acessosNecessarios === 1 ? '' : 's'}</b> a vender</>
+                )}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Ritmo do mês */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+        {[
+          { label: 'Recebido neste mês', valor: fmtMoeda(recebidoMes), icon: TrendingUp, cor: 'bg-emerald-100 text-emerald-600' },
+          { label: 'MRR estimado', valor: fmtMoeda(receitaAtual), icon: Rocket, cor: 'bg-indigo-100 text-indigo-600' },
+          { label: 'Novos clientes no mês', valor: String(novosMes), icon: CalendarPlus, cor: 'bg-sky-100 text-sky-600' },
+          { label: 'Projeção de novos (ritmo)', valor: String(projecaoNovos), icon: Users, cor: 'bg-violet-100 text-violet-600' },
+        ].map(({ label, valor, icon: Icon, cor }) => (
+          <div key={label} className="bg-white rounded-2xl ring-1 ring-slate-900/[0.06] shadow-sm p-4 flex items-center gap-3">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${cor}`}>
+              <Icon size={20} />
+            </div>
+            <div className="min-w-0">
+              <div className="text-[11px] text-slate-500 truncate">{label}</div>
+              <div className="text-lg font-bold text-slate-900 truncate">{valor}</div>
+            </div>
+          </div>
+        ))}
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <Card title="Sua receita atual (estimada por mês)">
@@ -95,40 +189,36 @@ export default function CalculadoraMetaPage() {
               onChange={(e) => setTicketMedio(e.target.value)}
               hint="Já vem calculado com base nos seus clientes ativos — mude aqui para simular outro preço de venda"
             />
+            <Btn onClick={salvarMeta} disabled={salvando}>
+              <Target size={15} /> {salvando ? 'Salvando…' : 'Salvar meta'}
+            </Btn>
           </div>
         </Card>
       </div>
 
-      {metaNum > 0 && (
+      {metaNum > 0 && !jaBateuMeta && acessosNecessarios !== null && (
         <div className="mt-5">
-          <Card>
-            {jaBateuMeta ? (
-              <div className="flex items-center gap-3 text-emerald-700">
-                <Target size={28} />
-                <div>
-                  <div className="font-bold text-lg">Meta já batida! 🎉</div>
-                  <div className="text-sm">Sua receita estimada ({fmtMoeda(receitaAtual)}) já alcança a meta de {fmtMoeda(metaNum)}.</div>
+          <Card title="Plano de ação para bater a meta">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
+              <div>
+                <div className="text-slate-500 text-[11px]">Vendas necessárias</div>
+                <div className="text-2xl font-bold text-slate-900">{acessosNecessarios} telas</div>
+              </div>
+              <div>
+                <div className="text-slate-500 text-[11px]">Por semana (4 semanas)</div>
+                <div className="text-2xl font-bold text-slate-900">{Math.ceil(acessosNecessarios / 4)} telas</div>
+              </div>
+              <div>
+                <div className="text-slate-500 text-[11px]">Por dia útil (~22 dias)</div>
+                <div className="text-2xl font-bold text-slate-900">
+                  {(acessosNecessarios / 22).toFixed(1)} telas
                 </div>
               </div>
-            ) : (
-              <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
-                  <Target size={28} />
-                </div>
-                <div>
-                  <div className="text-sm text-slate-500">
-                    Faltam <b className="text-slate-800">{fmtMoeda(falta)}</b> por mês para bater a meta de {fmtMoeda(metaNum)}.
-                  </div>
-                  {acessosNecessarios !== null ? (
-                    <div className="text-2xl font-bold text-slate-900 mt-1">
-                      {acessosNecessarios} {acessosNecessarios === 1 ? 'tela/acesso novo' : 'telas/acessos novos'}
-                    </div>
-                  ) : (
-                    <div className="text-sm text-rose-600 mt-1">Informe o ticket médio para calcular quantas telas vender.</div>
-                  )}
-                </div>
-              </div>
-            )}
+            </div>
+            <p className="text-[11px] text-slate-400 mt-3">
+              Considerando o ticket médio de {fmtMoeda(ticketNum)} por tela. Indicadores e revendas contam — cada
+              acesso novo de revenda master também soma na receita.
+            </p>
           </Card>
         </div>
       )}

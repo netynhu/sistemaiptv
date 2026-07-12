@@ -11,6 +11,8 @@ type CustoCliente = {
   nome: string;
   plano: string;
   telas: number;
+  custoTelas: number;
+  assistPlus: number;
   custo: number;
   recebe: number;
   margem: number;
@@ -45,7 +47,7 @@ export default function RelatoriosPage() {
       const fim = new Date(y, m, 0).toISOString().slice(0, 10);
       const fimTs = `${fim}T23:59:59`;
 
-      const [cobPagas, desp, comGeradas, novos, cancelados, telas, telasCfg] = await Promise.all([
+      const [cobPagas, desp, comGeradas, novos, cancelados, telas, telasCfg, despAssist] = await Promise.all([
         supabase.from('cobrancas').select('valor, tipo, forma_pagamento').eq('status', 'pago').gte('pago_em', inicio).lte('pago_em', fim),
         supabase.from('despesas').select('valor, categoria').gte('data', inicio).lte('data', fim),
         supabase.from('comissoes').select('valor').gte('criado_em', inicio).lte('criado_em', fimTs),
@@ -53,6 +55,8 @@ export default function RelatoriosPage() {
         supabase.from('clientes').select('id').eq('status', 'cancelado').gte('criado_em', inicio),
         supabase.from('clientes').select('id, nome, valor, aplicativo, telas_apps, planos(nome)').eq('status', 'ativo'),
         supabase.from('settings').select('valor').eq('chave', 'telas_config').maybeSingle(),
+        // Despesa real do Assist Plus lançada por cliente (Financeiro > Despesas, categoria "Assist Plus")
+        supabase.from('despesas').select('cliente_id, valor').eq('categoria', 'Assist Plus').not('cliente_id', 'is', null),
       ]);
       const custoTela = Number(telasCfg.data?.valor?.custo_por_tela ?? 1.5) || 1.5;
       setCustoPorTela(custoTela);
@@ -79,17 +83,27 @@ export default function RelatoriosPage() {
         [c.aplicativo, ...((c.telas_apps as string[]) ?? [])].filter(Boolean)
       );
 
-      // Custo e margem por cliente ativo (custo = nº de telas × custo por tela)
+      // Despesa do Assist Plus por cliente (o que você paga de licença pelo cliente)
+      const assistPorCliente: Record<string, number> = {};
+      for (const d of despAssist.data ?? []) {
+        if (d.cliente_id) assistPorCliente[d.cliente_id] = (assistPorCliente[d.cliente_id] ?? 0) + Number(d.valor);
+      }
+
+      // Custo e margem por cliente ativo (custo = telas × custo por tela + Assist Plus pago pelo cliente)
       const custoPorCliente: CustoCliente[] = (telas.data ?? [])
         .map((c: any) => {
           const apps = [c.aplicativo, ...((c.telas_apps as string[]) ?? [])].filter(Boolean);
-          const custo = Math.round(apps.length * custoTela * 100) / 100;
+          const custoTelas = Math.round(apps.length * custoTela * 100) / 100;
+          const assistPlus = Math.round((assistPorCliente[c.id] ?? 0) * 100) / 100;
+          const custo = Math.round((custoTelas + assistPlus) * 100) / 100;
           const recebe = Number(c.valor) || 0;
           return {
             id: c.id,
             nome: c.nome,
             plano: c.planos?.nome ?? '—',
             telas: apps.length,
+            custoTelas,
+            assistPlus,
             custo,
             recebe,
             margem: Math.round((recebe - custo) * 100) / 100,
@@ -261,7 +275,9 @@ export default function RelatoriosPage() {
                     <th className="py-2 font-medium">Cliente</th>
                     <th className="py-2 font-medium">Plano</th>
                     <th className="py-2 font-medium text-center">Telas</th>
-                    <th className="py-2 font-medium text-right">Custo</th>
+                    <th className="py-2 font-medium text-right">Custo telas</th>
+                    <th className="py-2 font-medium text-right">Assist Plus</th>
+                    <th className="py-2 font-medium text-right">Custo total</th>
                     <th className="py-2 font-medium text-right">Recebe</th>
                     <th className="py-2 font-medium text-right">Margem</th>
                   </tr>
@@ -272,7 +288,9 @@ export default function RelatoriosPage() {
                       <td className="py-2">{c.nome}</td>
                       <td className="py-2 text-slate-500">{c.plano}</td>
                       <td className="py-2 text-center">{c.telas}</td>
-                      <td className="py-2 text-right">{fmtMoeda(c.custo)}</td>
+                      <td className="py-2 text-right">{fmtMoeda(c.custoTelas)}</td>
+                      <td className="py-2 text-right">{c.assistPlus > 0 ? fmtMoeda(c.assistPlus) : <span className="text-slate-300">—</span>}</td>
+                      <td className="py-2 text-right font-medium">{fmtMoeda(c.custo)}</td>
                       <td className="py-2 text-right">{fmtMoeda(c.recebe)}</td>
                       <td className={`py-2 text-right font-medium ${c.margem >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                         {fmtMoeda(c.margem)}
@@ -284,6 +302,8 @@ export default function RelatoriosPage() {
                   <tr className="border-t-2 border-slate-200 font-semibold">
                     <td className="py-2" colSpan={2}>Total ({resumo.custoPorCliente.length} clientes)</td>
                     <td className="py-2 text-center">{resumo.totalTelas}</td>
+                    <td className="py-2 text-right">{fmtMoeda(resumo.custoPorCliente.reduce((s, c) => s + c.custoTelas, 0))}</td>
+                    <td className="py-2 text-right">{fmtMoeda(resumo.custoPorCliente.reduce((s, c) => s + c.assistPlus, 0))}</td>
                     <td className="py-2 text-right">{fmtMoeda(resumo.custoPorCliente.reduce((s, c) => s + c.custo, 0))}</td>
                     <td className="py-2 text-right">{fmtMoeda(resumo.custoPorCliente.reduce((s, c) => s + c.recebe, 0))}</td>
                     <td className={`py-2 text-right ${resumo.custoPorCliente.reduce((s, c) => s + c.margem, 0) >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
@@ -295,8 +315,9 @@ export default function RelatoriosPage() {
             </div>
           )}
           <p className="text-[11px] text-slate-400 mt-3">
-            Custo = número de telas do cliente × {fmtMoeda(custoPorTela)} por tela. Margem = valor cobrado − custo das
-            telas. Ordenado da menor margem para a maior, para você identificar rápido quem está pouco (ou nada) lucrativo.
+            Custo total = telas do cliente × {fmtMoeda(custoPorTela)} por tela + a despesa de Assist Plus lançada para
+            ele em Financeiro &gt; Despesas. Margem = valor cobrado − custo total. Ordenado da menor margem para a
+            maior, para você identificar rápido quem está pouco (ou nada) lucrativo.
           </p>
         </Card>
       </div>

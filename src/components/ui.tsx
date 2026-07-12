@@ -19,8 +19,8 @@ export function toast(msg: string, tipo: 'ok' | 'erro' = 'ok') {
   }
   const el = document.createElement('div');
   el.className = cls(
-    'toast-item px-4 py-2.5 rounded-lg shadow-lg text-sm text-white max-w-sm',
-    tipo === 'ok' ? 'bg-emerald-600' : 'bg-rose-600'
+    'toast-item px-4 py-2.5 rounded-xl shadow-xl text-sm text-white max-w-sm ring-1 ring-white/10',
+    tipo === 'ok' ? 'bg-slate-900' : 'bg-rose-600'
   );
   el.textContent = msg;
   box.appendChild(el);
@@ -35,14 +35,18 @@ type BtnProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
 
 export function Btn({ variant = 'primary', size = 'md', className, ...props }: BtnProps) {
   const base =
-    'inline-flex items-center justify-center gap-1.5 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
+    'inline-flex items-center justify-center gap-1.5 rounded-lg font-medium transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 active:scale-[0.98]';
   const sizes = { sm: 'px-2.5 py-1.5 text-xs', md: 'px-4 py-2 text-sm' };
   const variants = {
-    primary: 'bg-indigo-600 text-white hover:bg-indigo-700',
-    secondary: 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50',
-    danger: 'bg-rose-600 text-white hover:bg-rose-700',
-    success: 'bg-emerald-600 text-white hover:bg-emerald-700',
-    ghost: 'text-slate-600 hover:bg-slate-200',
+    primary:
+      'bg-gradient-to-b from-indigo-500 to-indigo-600 text-white shadow-sm shadow-indigo-600/25 hover:from-indigo-600 hover:to-indigo-700 hover:shadow-md hover:shadow-indigo-600/25',
+    secondary:
+      'bg-white text-slate-700 border border-slate-200 shadow-sm hover:bg-slate-50 hover:border-slate-300',
+    danger:
+      'bg-gradient-to-b from-rose-500 to-rose-600 text-white shadow-sm shadow-rose-600/25 hover:from-rose-600 hover:to-rose-700',
+    success:
+      'bg-gradient-to-b from-emerald-500 to-emerald-600 text-white shadow-sm shadow-emerald-600/25 hover:from-emerald-600 hover:to-emerald-700',
+    ghost: 'text-slate-600 hover:bg-slate-200/70',
   };
   return <button className={cls(base, sizes[size], variants[variant], className)} {...props} />;
 }
@@ -150,10 +154,15 @@ export function Card({
   className?: string;
 }) {
   return (
-    <div className={cls('bg-white rounded-xl border border-slate-200 shadow-sm', className)}>
+    <div
+      className={cls(
+        'bg-white rounded-2xl ring-1 ring-slate-900/[0.06] shadow-[0_1px_2px_rgba(15,23,42,0.04),0_4px_12px_-2px_rgba(15,23,42,0.06)]',
+        className
+      )}
+    >
       {(title || action) && (
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
-          <h3 className="font-semibold text-slate-800 text-sm">{title}</h3>
+          <h3 className="font-semibold text-slate-800 text-sm tracking-tight">{title}</h3>
           {action}
         </div>
       )}
@@ -164,19 +173,19 @@ export function Card({
 
 // ---------- Badges ----------
 const badgeCores: Record<string, string> = {
-  verde: 'bg-emerald-100 text-emerald-700',
-  vermelho: 'bg-rose-100 text-rose-700',
-  amarelo: 'bg-amber-100 text-amber-700',
-  azul: 'bg-sky-100 text-sky-700',
-  cinza: 'bg-slate-100 text-slate-600',
-  roxo: 'bg-violet-100 text-violet-700',
+  verde: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20',
+  vermelho: 'bg-rose-50 text-rose-700 ring-rose-600/20',
+  amarelo: 'bg-amber-50 text-amber-700 ring-amber-600/25',
+  azul: 'bg-sky-50 text-sky-700 ring-sky-600/20',
+  cinza: 'bg-slate-50 text-slate-600 ring-slate-500/20',
+  roxo: 'bg-violet-50 text-violet-700 ring-violet-600/20',
 };
 
 export function Badge({ cor = 'cinza', children }: { cor?: string; children: ReactNode }) {
   return (
     <span
       className={cls(
-        'inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap',
+        'inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap ring-1 ring-inset',
         badgeCores[cor] ?? badgeCores.cinza
       )}
     >
@@ -203,10 +212,10 @@ export function Modal({
 }) {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-slate-900/50 p-4 overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-slate-950/40 backdrop-blur-[2px] p-4 overflow-y-auto">
       <div
         className={cls(
-          'bg-white rounded-xl shadow-xl w-full my-8',
+          'bg-white rounded-2xl shadow-2xl ring-1 ring-slate-900/[0.06] w-full my-8',
           wide ? 'max-w-3xl' : 'max-w-xl'
         )}
       >
@@ -228,7 +237,7 @@ export function Modal({
 // ---------- Tabela ----------
 export function Tabela({ children }: { children: ReactNode }) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+    <div className="overflow-x-auto rounded-2xl ring-1 ring-slate-900/[0.06] bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04),0_4px_12px_-2px_rgba(15,23,42,0.06)]">
       <table className="w-full text-sm">{children}</table>
     </div>
   );
@@ -268,7 +277,7 @@ export function PageTitle({
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
       <div>
-        <h1 className="text-xl font-bold text-slate-900">{title}</h1>
+        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">{title}</h1>
         {subtitle && <p className="text-sm text-slate-500 mt-0.5">{subtitle}</p>}
       </div>
       {action}
