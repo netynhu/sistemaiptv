@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { getSetting, setSetting } from '@/lib/settings';
 import {
   connectInstance, disconnectInstance, extrairQr, extrairStatus,
-  initInstance, instanceStatus, setProxy, setWebhook,
+  initInstance, instanceStatus, setWebhook,
 } from '@/lib/uazapi';
 import type { UazapiConfig } from '@/types';
 
@@ -46,10 +46,6 @@ export async function POST(req: NextRequest) {
       case 'disconnect': {
         await disconnectInstance(cfg);
         return NextResponse.json({ ok: true });
-      }
-      case 'proxy': {
-        const data = await setProxy(cfg);
-        return NextResponse.json({ ok: true, resposta: data });
       }
       case 'webhook': {
         const origem = req.nextUrl.origin;

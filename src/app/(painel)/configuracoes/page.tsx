@@ -23,7 +23,7 @@ export default function ConfiguracoesPage() {
 
   const [planos, setPlanos] = useState<Plano[]>([]);
   const [links, setLinks] = useState<LinksPadrao>({ m3u: '', smarters_url: '', smarters_nome: '', xciptv_url: '', assist_plus_codigo: '' });
-  const [uazapi, setUazapi] = useState<UazapiConfig>({ server_url: '', admin_token: '', instance_token: '', instance_name: 'sistema', proxy_host: '', proxy_porta: '', proxy_usuario: '', proxy_senha: '', proxy_cidade: 'São Paulo SP' });
+  const [uazapi, setUazapi] = useState<UazapiConfig>({ server_url: '', admin_token: '', instance_token: '', instance_name: 'sistema' });
   const [pagamentos, setPagamentos] = useState<PagamentosConfig>({
     chave_pix: '', chave_pix_tipo: 'aleatoria', forma_pagamento_padrao: 'PIX',
     mercadopago_token: '', mercadopago_webhook_secret: '',
@@ -54,7 +54,7 @@ export default function ConfiguracoesPage() {
     const mapa: Record<string, any> = {};
     for (const s of cfg.data ?? []) mapa[s.chave] = s.valor;
     if (mapa.links_padrao) setLinks({ ...links, ...mapa.links_padrao });
-    if (mapa.uazapi) setUazapi((u) => ({ ...u, ...mapa.uazapi, proxy_cidade: 'São Paulo SP' }));
+    if (mapa.uazapi) setUazapi((u) => ({ ...u, ...mapa.uazapi }));
     if (mapa.pagamentos) setPagamentos((p) => ({ ...p, ...mapa.pagamentos }));
     if (mapa.avisos) setAvisos((a) => ({ ...a, ...mapa.avisos }));
     if (mapa.agente_ia) setIa((i) => ({ ...i, ...mapa.agente_ia }));
@@ -123,7 +123,6 @@ export default function ConfiguracoesPage() {
         setQrcode(null);
         toast('Instância desconectada.');
       }
-      if (acao === 'proxy') toast('Proxy aplicado na instância.');
       if (acao === 'webhook') toast(`Webhook configurado: ${data.url}`);
     } catch (e: any) {
       toast(`Erro: ${e.message}`, 'erro');
@@ -315,21 +314,6 @@ export default function ConfiguracoesPage() {
                 )}
               </div>
             )}
-          </Card>
-
-          <Card title="Proxy (cidade do IP)">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Input label="Host do proxy" value={uazapi.proxy_host} onChange={(e) => setUazapi({ ...uazapi, proxy_host: e.target.value })} />
-              <Input label="Porta" value={uazapi.proxy_porta} onChange={(e) => setUazapi({ ...uazapi, proxy_porta: e.target.value })} />
-              <Input label="Usuário do proxy" value={uazapi.proxy_usuario} onChange={(e) => setUazapi({ ...uazapi, proxy_usuario: e.target.value })} hint="Use {cidade} no usuário para inserir a cidade selecionada (ex.: user-city-{cidade})" />
-              <Input label="Senha do proxy" type="password" value={uazapi.proxy_senha} onChange={(e) => setUazapi({ ...uazapi, proxy_senha: e.target.value })} />
-              <Input label="Cidade" value="São Paulo SP" disabled hint="Fixo — mesmo formato usado na Uazapi" />
-            </div>
-            <div className="mt-4">
-              <Btn variant="secondary" onClick={() => chamarUazapi('proxy')} disabled={!!acaoWpp}>
-                {acaoWpp === 'proxy' ? 'Aplicando…' : 'Aplicar proxy na instância'}
-              </Btn>
-            </div>
           </Card>
 
           <Btn onClick={() => salvarSetting('uazapi', uazapi)} disabled={salvando}>Salvar configurações do WhatsApp</Btn>

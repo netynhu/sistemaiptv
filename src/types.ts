@@ -133,11 +133,6 @@ export type UazapiConfig = {
   admin_token: string;
   instance_token: string;
   instance_name: string;
-  proxy_host: string;
-  proxy_porta: string;
-  proxy_usuario: string;
-  proxy_senha: string;
-  proxy_cidade: string;
 };
 
 export type PagamentosConfig = {

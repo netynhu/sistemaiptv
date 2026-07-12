@@ -65,31 +65,6 @@ export async function disconnectInstance(cfg: UazapiConfig) {
   return uaz(cfg, '/instance/disconnect', { auth: 'instance', body: {} });
 }
 
-// Define o proxy da instância (usado para escolher a cidade do IP)
-export async function setProxy(cfg: UazapiConfig) {
-  // Provedores de proxy costumam aceitar a cidade no usuário (ex.: user-city-{cidade}).
-  const username = (cfg.proxy_usuario || '')
-    .split('{cidade}')
-    .join((cfg.proxy_cidade || '').toLowerCase().replace(/\s+/g, ''));
-  const body = {
-    host: cfg.proxy_host,
-    port: cfg.proxy_porta,
-    username,
-    password: cfg.proxy_senha,
-  };
-  // O caminho pode variar conforme a versão do servidor Uazapi — tenta os conhecidos.
-  const paths = ['/instance/updateProxy', '/instance/proxy', '/proxy/set'];
-  let lastErr: unknown;
-  for (const p of paths) {
-    try {
-      return await uaz(cfg, p, { auth: 'instance', body });
-    } catch (e) {
-      lastErr = e;
-    }
-  }
-  throw lastErr instanceof Error ? lastErr : new Error('Não foi possível definir o proxy.');
-}
-
 // Configura o webhook de mensagens recebidas
 export async function setWebhook(cfg: UazapiConfig, url: string) {
   return uaz(cfg, '/webhook', {
