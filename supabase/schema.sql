@@ -101,10 +101,11 @@ create table if not exists public.cobrancas (
 );
 create index if not exists idx_cobrancas_status on public.cobrancas(status);
 create index if not exists idx_cobrancas_vencimento on public.cobrancas(vencimento);
-create index if not exists idx_cobrancas_externo on public.cobrancas(externo_provedor, externo_id);
+-- Migração para bancos já existentes — precisa vir ANTES do índice abaixo, que usa essas colunas
 alter table public.cobrancas add column if not exists externo_provedor text check (externo_provedor in ('asaas','mercadopago'));
 alter table public.cobrancas add column if not exists externo_id text;
 alter table public.cobrancas add column if not exists pix_copia_cola text;
+create index if not exists idx_cobrancas_externo on public.cobrancas(externo_provedor, externo_id);
 
 -- ------------------------------------------------------------
 -- COMISSÕES (para indicadores)
