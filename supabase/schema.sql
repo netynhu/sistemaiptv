@@ -276,7 +276,7 @@ insert into public.settings (chave, valor) values
   ('mensagens', '{
     "cobranca": "Olá {nome}! 👋😊\n\n📺 Sua assinatura vence em *{vencimento}*.\n💰 Valor: *{valor}*\n\n✅ Para renovar, é só pagar o PIX abaixo (toque para copiar):\n{pix}\n\n📩 Depois do pagamento, envie o comprovante aqui que já renovamos seu acesso! 🚀",
     "atraso": "Olá {nome}! ⚠️\n\n📺 Sua assinatura venceu em *{vencimento}* e o pagamento ainda não caiu por aqui.\n💰 Valor: *{valor}*\n\n✅ Para evitar que seu acesso seja suspenso, faça o PIX abaixo (toque para copiar):\n{pix}\n\n📩 Já pagou? Manda o comprovante aqui que a gente confirma rapidinho! 🙏",
-    "boas_vindas": "Olá {nome}! Seja bem-vindo(a)! 🎉📺 Seu acesso já está ativo. Qualquer dúvida sobre a instalação, é só chamar aqui! 😊"
+    "boas_vindas": "Olá {nome}! Seja bem-vindo(a)! 🎉📺 Seu acesso já está ativo.\n\n☎️ Guarde este número: é o nosso *suporte*. Sempre que precisar de qualquer coisa, é só chamar aqui! 😊"
   }'::jsonb)
 on conflict (chave) do nothing;
 

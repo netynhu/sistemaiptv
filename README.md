@@ -129,6 +129,7 @@ src/app/api/webhook/uazapi       ← recebe mensagens do WhatsApp (+ resposta da
 src/app/api/webhook/mercadopago  ← baixa automática de pagamentos do Mercado Pago
 src/app/api/pagamento/mercadopago← gera uma cobrança PIX real no Mercado Pago
 src/app/api/avisos/              ← avisos ao grupo (novo cliente, pagamento recebido)
+src/app/api/mensagem/boas-vindas ← mensagem de boas-vindas/suporte ao cliente ao cadastrá-lo
 src/app/api/automacao/cobranca-diaria ← rotina diária chamada pelo n8n
 src/app/api/cobranca/enviar      ← envia cobrança por WhatsApp (manual)
 src/app/api/suporte/enviar       ← envio manual do atendente

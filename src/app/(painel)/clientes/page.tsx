@@ -203,6 +203,16 @@ export default function ClientesPage() {
       }).catch(() => {});
     }
 
+    // Envia a mensagem de boas-vindas ao próprio cliente, apresentando este número como o
+    // canal de suporte (Configurações > Mensagens). Só para cliente ativo e com WhatsApp.
+    if (novo && registro.status === 'ativo' && registro.telefone) {
+      fetch('/api/mensagem/boas-vindas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cliente_id: novo.id }),
+      }).catch(() => {});
+    }
+
     setSalvando(false);
     toast('Cliente cadastrado.');
     setModal(false);

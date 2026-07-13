@@ -497,15 +497,17 @@ export default function ConfiguracoesPage() {
                 />
               ) : null}
               <TextArea
-                label="Mensagem de boas-vindas"
+                label="Mensagem de boas-vindas (enviada automaticamente ao cliente assim que ele é cadastrado)"
                 rows={4}
                 value={mensagens.boas_vindas}
                 onChange={(e) => setMensagens({ ...mensagens, boas_vindas: e.target.value })}
               />
               <p className="text-xs text-slate-400">
-                Variáveis disponíveis: {'{nome}'}, {'{valor}'}, {'{vencimento}'}, {'{descricao}'} e {'{pix}'}. O botão de
-                copiar PIX é enviado junto com a mensagem quando há um código PIX disponível (gerado no Mercado
-                Pago ou a chave PIX fixa em Pagamentos).
+                Enviada ao WhatsApp do próprio cliente ao cadastrá-lo (se ele estiver ativo e tiver WhatsApp) —
+                use para apresentar este número como o canal de suporte. Variáveis disponíveis: {'{nome}'},
+                {' '}{'{valor}'}, {'{vencimento}'} e {'{descricao}'} (o plano). As mensagens de cobrança/atraso
+                também aceitam {'{pix}'}, com o botão de copiar PIX quando há um código disponível (gerado no
+                Mercado Pago ou a chave PIX fixa em Pagamentos).
               </p>
             </div>
           </Card>
