@@ -31,7 +31,9 @@ export default function ConfiguracoesPage() {
     asaas_token: '', asaas_webhook_token: '', picpay_token: '',
   });
   const [avisos, setAvisos] = useState<AvisosConfig>({ grupo_whatsapp_id: '' });
-  const [telasConfig, setTelasConfig] = useState<{ custo_por_tela: string }>({ custo_por_tela: '1.5' });
+  const [telasConfig, setTelasConfig] = useState<{ custo_por_tela: string; custo_assist_plus: string }>({
+    custo_por_tela: '1.5', custo_assist_plus: '1.5',
+  });
   const [ia, setIa] = useState<AgenteIAConfig>({ habilitado: false, api_key: '', model: '', auto_resposta: true, prompt_sistema: '' });
   const [mensagens, setMensagens] = useState<MensagensConfig>({
     cobranca: '', atraso: '', boas_vindas: '',
@@ -62,7 +64,13 @@ export default function ConfiguracoesPage() {
     if (mapa.mensagens) setMensagens((m) => ({ ...m, ...mapa.mensagens }));
     if (mapa.comissao_padrao) setComissaoPadrao({ tipo: mapa.comissao_padrao.tipo ?? 'fixo', valor: String(mapa.comissao_padrao.valor ?? '') });
     if (mapa.revenda_padrao) setRevendaPadrao({ valor_por_acesso: String(mapa.revenda_padrao.valor_por_acesso ?? '') });
-    if (mapa.telas_config) setTelasConfig({ custo_por_tela: String(mapa.telas_config.custo_por_tela ?? '1.5') });
+    if (mapa.telas_config) {
+      const cpt = mapa.telas_config.custo_por_tela ?? '1.5';
+      setTelasConfig({
+        custo_por_tela: String(cpt),
+        custo_assist_plus: String(mapa.telas_config.custo_assist_plus ?? cpt),
+      });
+    }
     setCarregando(false);
   }
 
@@ -120,10 +128,11 @@ export default function ConfiguracoesPage() {
       }
     }
     const custoPorTela = parseFloat(telasConfig.custo_por_tela || '0') || 0;
+    const custoAssistPlus = parseFloat(telasConfig.custo_assist_plus || '0') || 0;
     await salvarSetting('comissao_padrao', { tipo: comissaoPadrao.tipo, valor: parseFloat(comissaoPadrao.valor || '0') || 0 }, '');
     await salvarSetting('revenda_padrao', { valor_por_acesso: parseFloat(revendaPadrao.valor_por_acesso || '0') || 0 }, '');
-    await salvarSetting('telas_config', { custo_por_tela: custoPorTela }, '');
-    await resincronizarDespesasAssistPlus(custoPorTela);
+    await salvarSetting('telas_config', { custo_por_tela: custoPorTela, custo_assist_plus: custoAssistPlus }, '');
+    await resincronizarDespesasAssistPlus(custoAssistPlus);
     setSalvando(false);
     toast('Planos e padrões salvos — despesas de Assist Plus recalculadas.');
   }
@@ -258,14 +267,22 @@ export default function ConfiguracoesPage() {
           </Card>
 
           <Card title="Telas simultâneas">
-            <Input
-              label="Preço por tela adicional (R$)"
-              type="number" step="0.01"
-              value={telasConfig.custo_por_tela}
-              onChange={(e) => setTelasConfig({ custo_por_tela: e.target.value })}
-              hint="Usado no custo informativo de telas (Relatórios) e na despesa automática do Assist Plus por tela"
-              className="max-w-xs"
-            />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl">
+              <Input
+                label="Preço por tela adicional (R$)"
+                type="number" step="0.01"
+                value={telasConfig.custo_por_tela}
+                onChange={(e) => setTelasConfig({ ...telasConfig, custo_por_tela: e.target.value })}
+                hint="Valor informativo usado no relatório de custo de telas — não gera despesa sozinho"
+              />
+              <Input
+                label="Custo do Assist Plus por tela (R$)"
+                type="number" step="0.01"
+                value={telasConfig.custo_assist_plus}
+                onChange={(e) => setTelasConfig({ ...telasConfig, custo_assist_plus: e.target.value })}
+                hint="O que você paga por tela com Assist Plus — gera a despesa automática em Financeiro > Despesas. Ajuste aqui se o preço subir ou cair."
+              />
+            </div>
           </Card>
 
           <Btn onClick={salvarPlanos} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar planos e padrões'}</Btn>

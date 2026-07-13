@@ -32,6 +32,7 @@ export default function ClientesPage() {
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [form, setForm] = useState({ ...FORM_VAZIO });
   const [custoPorTela, setCustoPorTela] = useState(1.5);
+  const [custoAssistPlus, setCustoAssistPlus] = useState(1.5);
 
   const appsDisponiveis = useMemo(
     () => Array.from(new Set(dispositivos.flatMap((d) => d.apps))).sort(),
@@ -54,7 +55,9 @@ export default function ClientesPage() {
     setRevendedores((rev.data as Revendedor[]) ?? []);
     setDispositivos((disp.data as Dispositivo[]) ?? []);
     setLinks((cfg.data?.valor as LinksPadrao) ?? null);
-    if (telasCfg.data?.valor?.custo_por_tela) setCustoPorTela(Number(telasCfg.data.valor.custo_por_tela));
+    const cfgTelas = telasCfg.data?.valor;
+    if (cfgTelas?.custo_por_tela) setCustoPorTela(Number(cfgTelas.custo_por_tela));
+    setCustoAssistPlus(Number(cfgTelas?.custo_assist_plus ?? cfgTelas?.custo_por_tela ?? 1.5));
     setCarregando(false);
   }
 
@@ -108,7 +111,8 @@ export default function ClientesPage() {
   }
 
   // Mantém em Financeiro > Despesas uma linha só com o custo do Assist Plus deste cliente
-  // (R$1,50 por tela que usa Assist Plus — as demais telas são só informativas, não viram despesa)
+  // (custo por tela que usa Assist Plus, configurado em Configurações — as demais telas são
+  // só informativas, não viram despesa)
   async function sincronizarDespesaAssistPlus(clienteId: string, nomeCliente: string, aplicativoPrincipal: string | null, extras: string[]) {
     const qtd = todasAsTelas(aplicativoPrincipal, extras).filter((a) => a === APP_ASSIST_PLUS).length;
     const { data: existente } = await supabase
@@ -119,7 +123,7 @@ export default function ClientesPage() {
       .maybeSingle();
 
     if (qtd > 0) {
-      const valor = Math.round(qtd * custoPorTela * 100) / 100;
+      const valor = Math.round(qtd * custoAssistPlus * 100) / 100;
       const descricao = `Assist Plus — ${nomeCliente} (${qtd} tela${qtd > 1 ? 's' : ''})`;
       if (existente) {
         await supabase.from('despesas').update({ descricao, valor }).eq('id', existente.id);
@@ -487,7 +491,7 @@ export default function ClientesPage() {
             <p className="text-[11px] text-slate-400 mt-1">
               Cada tela custa {fmtMoeda(custoPorTela)} (informativo, aparece só no relatório). Telas com{' '}
               <b>Assist Plus</b> (incluindo se for o app principal) geram automaticamente uma despesa de{' '}
-              {fmtMoeda(custoPorTela)} cada em Financeiro &gt; Despesas.
+              {fmtMoeda(custoAssistPlus)} cada em Financeiro &gt; Despesas.
             </p>
           </div>
 

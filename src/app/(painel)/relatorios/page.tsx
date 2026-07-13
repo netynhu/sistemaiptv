@@ -22,13 +22,14 @@ type Resumo = {
   receitaClientes: number;
   receitaRevendas: number;
   despesas: number;
-  comissoesGeradas: number;
+  comissoesPagas: number;
   novosClientes: number;
   cancelamentos: number;
   porForma: Record<string, number>;
   porCategoria: Record<string, number>;
   totalTelas: number;
   telasAssistPlus: number;
+  custoAssistPlusTotal: number;
   custoPorCliente: CustoCliente[];
 };
 
@@ -45,12 +46,12 @@ export default function RelatoriosPage() {
       const inicio = `${mes}-01`;
       const [y, m] = mes.split('-').map(Number);
       const fim = new Date(y, m, 0).toISOString().slice(0, 10);
-      const fimTs = `${fim}T23:59:59`;
 
-      const [cobPagas, desp, comGeradas, novos, cancelados, telas, telasCfg, despAssist] = await Promise.all([
+      const [cobPagas, desp, comPagas, novos, cancelados, telas, telasCfg, despAssist] = await Promise.all([
         supabase.from('cobrancas').select('valor, tipo, forma_pagamento').eq('status', 'pago').gte('pago_em', inicio).lte('pago_em', fim),
         supabase.from('despesas').select('valor, categoria').gte('data', inicio).lte('data', fim),
-        supabase.from('comissoes').select('valor').gte('criado_em', inicio).lte('criado_em', fimTs),
+        // Comissões efetivamente PAGAS no mês (dinheiro que já saiu de verdade) — não as apenas geradas
+        supabase.from('comissoes').select('valor').eq('status', 'pago').gte('pago_em', inicio).lte('pago_em', fim),
         supabase.from('clientes').select('id').gte('data_ativacao', inicio).lte('data_ativacao', fim),
         supabase.from('clientes').select('id').eq('status', 'cancelado').gte('criado_em', inicio),
         supabase.from('clientes').select('id, nome, valor, aplicativo, telas_apps, planos(nome)').eq('status', 'ativo'),
@@ -72,11 +73,7 @@ export default function RelatoriosPage() {
         porCategoria[d.categoria] = (porCategoria[d.categoria] ?? 0) + Number(d.valor);
       }
 
-      // Comissões de indicação também são despesa (dinheiro pago para fora)
-      const comissoesGeradasValor = (comGeradas.data ?? []).reduce((s, c) => s + Number(c.valor), 0);
-      if (comissoesGeradasValor > 0) {
-        porCategoria['Comissões de indicação'] = comissoesGeradasValor;
-      }
+      const comissoesPagasValor = (comPagas.data ?? []).reduce((s, c) => s + Number(c.valor), 0);
 
       // O dispositivo/app principal do cliente já conta como a 1ª tela dele
       const todasTelas = (telas.data ?? []).flatMap((c: any) =>
@@ -114,14 +111,15 @@ export default function RelatoriosPage() {
       setResumo({
         receitaClientes: pagas.filter((c) => c.tipo === 'cliente').reduce((s, c) => s + Number(c.valor), 0),
         receitaRevendas: pagas.filter((c) => c.tipo === 'revendedor').reduce((s, c) => s + Number(c.valor), 0),
-        despesas: (desp.data ?? []).reduce((s, d) => s + Number(d.valor), 0) + comissoesGeradasValor,
-        comissoesGeradas: comissoesGeradasValor,
+        despesas: (desp.data ?? []).reduce((s, d) => s + Number(d.valor), 0),
+        comissoesPagas: comissoesPagasValor,
         novosClientes: novos.data?.length ?? 0,
         cancelamentos: cancelados.data?.length ?? 0,
         porForma,
         porCategoria,
         totalTelas: todasTelas.length,
         telasAssistPlus: todasTelas.filter((a) => a === 'Assist Plus').length,
+        custoAssistPlusTotal: Object.values(assistPorCliente).reduce((s, v) => s + v, 0),
         custoPorCliente,
       });
       setCarregando(false);
@@ -131,7 +129,8 @@ export default function RelatoriosPage() {
   if (carregando || !resumo) return <Carregando />;
 
   const receitaTotal = resumo.receitaClientes + resumo.receitaRevendas;
-  const lucro = receitaTotal - resumo.despesas;
+  // Lucro final desconta despesas operacionais E as comissões efetivamente pagas no mês
+  const lucro = receitaTotal - resumo.despesas - resumo.comissoesPagas;
 
   return (
     <div>
@@ -155,17 +154,22 @@ export default function RelatoriosPage() {
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
         {[
-          ['Receita total', fmtMoeda(receitaTotal), 'text-emerald-600'],
+          ['Receita', fmtMoeda(receitaTotal), 'text-emerald-600'],
           ['Despesas', fmtMoeda(resumo.despesas), 'text-rose-600'],
-          ['Lucro', fmtMoeda(lucro), lucro >= 0 ? 'text-emerald-600' : 'text-rose-600'],
-          ['Comissões geradas', fmtMoeda(resumo.comissoesGeradas), 'text-violet-600'],
+          ['Comissão paga', fmtMoeda(resumo.comissoesPagas), 'text-violet-600'],
+          ['Lucro final', fmtMoeda(lucro), lucro >= 0 ? 'text-emerald-600' : 'text-rose-600'],
         ].map(([label, valor, cor]) => (
-          <div key={label as string} className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+          <div key={label as string} className="bg-white rounded-2xl ring-1 ring-slate-900/[0.06] shadow-sm p-4">
             <div className="text-[11px] text-slate-500">{label}</div>
             <div className={`text-xl font-bold ${cor}`}>{valor}</div>
           </div>
         ))}
       </div>
+      <p className="text-[11px] text-slate-400 -mt-3 mb-5">
+        Lucro final = Receita − Despesas − Comissão paga. &quot;Comissão paga&quot; considera só o que já saiu de
+        verdade no mês (comissões com status Pago); comissões geradas mas ainda pendentes não entram aqui — veja
+        em Financeiro &gt; Despesas &gt; Comissões.
+      </p>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
         <Card title="Composição da receita">
@@ -252,7 +256,7 @@ export default function RelatoriosPage() {
             </div>
             <div>
               <div className="text-slate-500 text-[11px]">Das quais Assist Plus ({resumo.telasAssistPlus} tela{resumo.telasAssistPlus === 1 ? '' : 's'})</div>
-              <div className="text-xl font-bold text-slate-900">{fmtMoeda(resumo.telasAssistPlus * custoPorTela)}</div>
+              <div className="text-xl font-bold text-slate-900">{fmtMoeda(resumo.custoAssistPlusTotal)}</div>
             </div>
           </div>
           <p className="text-[11px] text-slate-400 mt-3">
