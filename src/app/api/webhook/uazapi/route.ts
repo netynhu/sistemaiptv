@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import { getSetting } from '@/lib/settings';
 import { gerarRespostaIA, type MensagemIA } from '@/lib/ia';
-import { sendText, sendGroupText } from '@/lib/uazapi';
+import { sendText } from '@/lib/uazapi';
+import { avisarGrupo } from '@/lib/avisos';
 import { fmtTelefone } from '@/lib/utils';
-import type { AgenteIAConfig, AvisosConfig, Cliente, UazapiConfig } from '@/types';
+import type { AgenteIAConfig, Cliente, UazapiConfig } from '@/types';
 
 // Webhook de mensagens recebidas da Uazapi.
 // Configure em Configurações > WhatsApp > "Configurar webhook".
@@ -155,24 +156,17 @@ export async function POST(req: NextRequest) {
             .eq('id', conversa.id);
 
           // Dispara aviso no grupo de administradores (Configurações > Avisos)
-          try {
-            const avisos = await getSetting<AvisosConfig>('avisos');
-            const uazapi = await getSetting<UazapiConfig>('uazapi');
-            if (avisos?.grupo_whatsapp_id && uazapi?.server_url && uazapi.instance_token) {
-              const quem = cliente?.nome || conversa.nome || fmtTelefone(telefone);
-              const aviso = [
-                '🚨 *Atendimento humano necessário*',
-                `Cliente: ${quem}`,
-                `WhatsApp: ${fmtTelefone(telefone)}`,
-                `Motivo: ${resultado.escalar.motivo}`,
-                '',
-                'Abra a aba *Suporte* para assumir a conversa.',
-              ].join('\n');
-              await sendGroupText(uazapi, avisos.grupo_whatsapp_id, aviso);
-            }
-          } catch (e) {
-            console.error('Falha ao avisar grupo de admins sobre escalonamento:', e);
-          }
+          const quem = cliente?.nome || conversa.nome || fmtTelefone(telefone);
+          await avisarGrupo(
+            [
+              '🚨 *Atendimento humano necessário*',
+              `Cliente: ${quem}`,
+              `WhatsApp: ${fmtTelefone(telefone)}`,
+              `Motivo: ${resultado.escalar.motivo}`,
+              '',
+              'Abra a aba *Suporte* para assumir a conversa.',
+            ].join('\n')
+          );
         } else if (resultado.resposta) {
           await admin
             .from('conversas')

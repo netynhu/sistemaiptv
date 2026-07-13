@@ -166,6 +166,13 @@ export default function ReceitasPage() {
         }
       }
 
+      // Avisa o grupo de administradores no WhatsApp (Configurações > Avisos), sem bloquear.
+      fetch('/api/avisos/pagamento', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cobranca_id: pagando.id }),
+      }).catch(() => {});
+
       toast('Pagamento registrado.');
       setPagando(null);
       await carregar();
@@ -203,10 +210,10 @@ export default function ReceitasPage() {
     }
   }
 
-  async function gerarGateway(c: Cobranca, provedor: 'asaas' | 'mercadopago') {
+  async function gerarGateway(c: Cobranca) {
     setGerandoGateway(c.id);
     try {
-      const res = await fetch(`/api/pagamento/${provedor}`, {
+      const res = await fetch('/api/pagamento/mercadopago', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ cobranca_id: c.id }),
@@ -393,23 +400,21 @@ export default function ReceitasPage() {
                           <button
                             onClick={() => setVerPix(c)}
                             className="p-1.5 text-slate-400 hover:text-indigo-600"
-                            title={`Ver/copiar PIX gerado (${c.externo_provedor === 'asaas' ? 'Asaas' : 'Mercado Pago'})`}
+                            title="Ver/copiar PIX gerado (Mercado Pago)"
                           >
                             <CreditCard size={16} />
                           </button>
                         ) : (
-                          <>
-                            {pagamentosCfg?.asaas_token && (
-                              <button
-                                onClick={() => gerarGateway(c, 'asaas')}
-                                disabled={gerandoGateway === c.id}
-                                className="text-[11px] px-2 py-1 rounded border border-slate-300 text-slate-600 hover:bg-slate-50"
-                                title="Gerar cobrança PIX real no Asaas"
-                              >
-                                {gerandoGateway === c.id ? '…' : 'Asaas'}
-                              </button>
-                            )}
-                          </>
+                          pagamentosCfg?.mercadopago_token && (
+                            <button
+                              onClick={() => gerarGateway(c)}
+                              disabled={gerandoGateway === c.id}
+                              className="text-[11px] px-2 py-1 rounded border border-slate-300 text-slate-600 hover:bg-slate-50"
+                              title="Gerar cobrança PIX real no Mercado Pago"
+                            >
+                              {gerandoGateway === c.id ? '…' : 'Mercado Pago'}
+                            </button>
+                          )
                         )}
                         <Btn
                           size="sm"
@@ -467,8 +472,6 @@ export default function ReceitasPage() {
               <Select label="Forma de pagamento" value={formaPg} onChange={(e) => setFormaPg(e.target.value)}>
                 <option>PIX</option>
                 <option>Mercado Pago</option>
-                <option>Asaas</option>
-                <option>PicPay</option>
                 <option>Dinheiro</option>
                 <option>Outro</option>
               </Select>
@@ -495,7 +498,7 @@ export default function ReceitasPage() {
               <div className="font-medium text-slate-800">{nomeDestino(verPix)}</div>
               <div className="text-slate-500">{verPix.descricao}</div>
               <div className="text-lg font-bold mt-1">{fmtMoeda(verPix.valor)}</div>
-              <Badge cor="roxo">{verPix.externo_provedor === 'asaas' ? 'Asaas' : 'Mercado Pago'}</Badge>
+              <Badge cor="roxo">Mercado Pago</Badge>
             </Card>
             <div>
               <span className="block text-xs font-medium text-slate-600 mb-1">Código PIX (copia e cola)</span>
@@ -508,8 +511,8 @@ export default function ReceitasPage() {
                 </Btn>
               </div>
               <p className="text-[11px] text-slate-400 mt-2">
-                Quando o cliente pagar este PIX, o {verPix.externo_provedor === 'asaas' ? 'Asaas' : 'Mercado Pago'}{' '}
-                avisa o sistema e a cobrança é dada como paga automaticamente — sem precisar clicar em nada aqui.
+                Quando o cliente pagar este PIX, o Mercado Pago avisa o sistema e a cobrança é dada como paga
+                automaticamente — sem precisar clicar em nada aqui.
               </p>
             </div>
           </div>

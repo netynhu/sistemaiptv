@@ -2,15 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import { getSetting } from '@/lib/settings';
 import { enviarCobrancaWhatsApp, type MensagensConfig } from '@/lib/cobranca';
-import { sendGroupText } from '@/lib/uazapi';
-import { fmtMoeda, hojeISO, nomeComUsuario } from '@/lib/utils';
-import type { AvisosConfig, Cobranca, PagamentosConfig, UazapiConfig } from '@/types';
+import { hojeISO } from '@/lib/utils';
+import type { Cobranca, PagamentosConfig, UazapiConfig } from '@/types';
 
 // Rotina diária chamada por um cron externo (ex.: n8n) — não depende de sessão de admin,
-// só do segredo compartilhado. Faz 3 coisas:
+// só do segredo compartilhado. Faz 2 coisas:
 //  1. Envia a cobrança de quem vence hoje.
 //  2. Envia o followup de atraso de quem venceu ontem e ainda não pagou.
-//  3. Manda o resumo dos recebimentos de ontem para o grupo de aviso dos administradores.
+// Os avisos ao grupo de administradores (novo cliente, pagamento recebido, atendimento humano)
+// são enviados na hora do acontecimento, não mais em um resumo diário.
 // Aceita POST e GET — cron externo (n8n, cron-job.org etc.) pode chamar com qualquer um dos dois.
 export async function POST(req: NextRequest) {
   return executar(req);
@@ -34,7 +34,6 @@ async function executar(req: NextRequest) {
   const resultado = {
     cobrancasEnviadas: 0,
     falhasEnvio: [] as string[],
-    resumoEnviado: false,
   };
 
   try {
@@ -65,35 +64,6 @@ async function executar(req: NextRequest) {
         } else {
           resultado.falhasEnvio.push(`${cobranca.clientes?.nome ?? cobranca.id}: ${r.erro}`);
         }
-      }
-
-      // ---- 3: resumo de recebimentos de ontem para o grupo de aviso ----
-      const avisos = await getSetting<AvisosConfig>('avisos');
-      if (avisos?.grupo_whatsapp_id) {
-        const { data: pagasOntem } = await admin
-          .from('cobrancas')
-          .select('*, clientes(*), revendedores(*)')
-          .eq('status', 'pago')
-          .gte('pago_em', ontem)
-          .lte('pago_em', ontem);
-
-        const lista = (pagasOntem as Cobranca[]) ?? [];
-        const total = lista.reduce((s, c) => s + Number(c.valor), 0);
-        const linhas = lista.map((c) => {
-          const nome = c.tipo === 'cliente' ? nomeComUsuario(c.clientes?.nome, c.clientes?.usuario) : c.revendedores?.nome ?? '—';
-          return `• ${nome} — ${fmtMoeda(c.valor)}`;
-        });
-
-        const texto = [
-          `📊 *Resumo de recebimentos — ${ontem.split('-').reverse().join('/')}*`,
-          '',
-          lista.length === 0 ? 'Nenhum recebimento ontem.' : linhas.join('\n'),
-          '',
-          `💰 *Total: ${fmtMoeda(total)}*`,
-        ].join('\n');
-
-        await sendGroupText(uazapi, avisos.grupo_whatsapp_id, texto);
-        resultado.resumoEnviado = true;
       }
     }
 

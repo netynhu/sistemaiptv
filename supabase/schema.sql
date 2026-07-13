@@ -91,10 +91,10 @@ create table if not exists public.cobrancas (
   vencimento date not null,
   status text not null default 'pendente' check (status in ('pendente','pago','cancelado')),
   pago_em date,
-  forma_pagamento text, -- pix, mercadopago, asaas, picpay, dinheiro...
+  forma_pagamento text, -- pix, mercadopago, dinheiro...
   whatsapp_enviado_em timestamptz,
-  -- cobrança PIX gerada de verdade no Asaas/Mercado Pago (para dar baixa automática via webhook)
-  externo_provedor text check (externo_provedor in ('asaas','mercadopago')),
+  -- cobrança PIX gerada de verdade no Mercado Pago (para dar baixa automática via webhook)
+  externo_provedor text check (externo_provedor in ('mercadopago')),
   externo_id text,
   pix_copia_cola text,
   criado_em timestamptz not null default now()
@@ -102,7 +102,7 @@ create table if not exists public.cobrancas (
 create index if not exists idx_cobrancas_status on public.cobrancas(status);
 create index if not exists idx_cobrancas_vencimento on public.cobrancas(vencimento);
 -- Migração para bancos já existentes — precisa vir ANTES do índice abaixo, que usa essas colunas
-alter table public.cobrancas add column if not exists externo_provedor text check (externo_provedor in ('asaas','mercadopago'));
+alter table public.cobrancas add column if not exists externo_provedor text check (externo_provedor in ('mercadopago'));
 alter table public.cobrancas add column if not exists externo_id text;
 alter table public.cobrancas add column if not exists pix_copia_cola text;
 create index if not exists idx_cobrancas_externo on public.cobrancas(externo_provedor, externo_id);
@@ -259,10 +259,7 @@ insert into public.settings (chave, valor) values
     "chave_pix_tipo": "aleatoria",
     "forma_pagamento_padrao": "PIX",
     "mercadopago_token": "",
-    "mercadopago_webhook_secret": "",
-    "asaas_token": "",
-    "asaas_webhook_token": "",
-    "picpay_token": ""
+    "mercadopago_webhook_secret": ""
   }'::jsonb),
   ('avisos', '{
     "grupo_whatsapp_id": ""

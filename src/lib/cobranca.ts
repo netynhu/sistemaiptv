@@ -38,7 +38,7 @@ export async function enviarCobrancaWhatsApp(
     ? mensagens?.atraso || TEMPLATE_ATRASO_PADRAO
     : mensagens?.cobranca || TEMPLATE_COBRANCA_PADRAO;
 
-  // Se já existe uma cobrança PIX real gerada (Asaas/Mercado Pago), usa o código dela;
+  // Se já existe uma cobrança PIX real gerada (Mercado Pago), usa o código dela;
   // senão cai para a chave PIX estática configurada.
   const pixCode = cobranca.pix_copia_cola || pagamentos?.chave_pix || '';
   const usarBotao = atrasada ? (mensagens?.atraso_botao ?? true) : (mensagens?.cobranca_botao ?? true);

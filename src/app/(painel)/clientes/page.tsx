@@ -193,6 +193,16 @@ export default function ClientesPage() {
     }
     if (novo) await sincronizarDespesaAssistPlus(novo.id, registro.nome, registro.aplicativo, telasApps);
 
+    // Avisa o grupo de administradores no WhatsApp (Configurações > Avisos). Sem bloquear o
+    // fechamento do modal — se o aviso falhar, o cadastro já está salvo.
+    if (novo) {
+      fetch('/api/avisos/cliente-novo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cliente_id: novo.id }),
+      }).catch(() => {});
+    }
+
     setSalvando(false);
     toast('Cliente cadastrado.');
     setModal(false);

@@ -14,7 +14,7 @@ import { Bell, Bot, Copy, CreditCard, Link2, MessageSquareText, QrCode, Tags } f
 
 type Aba = 'planos' | 'links' | 'whatsapp' | 'pagamentos' | 'ia' | 'mensagens' | 'avisos';
 
-const FORMAS_PAGAMENTO = ['PIX', 'Mercado Pago', 'Asaas', 'PicPay', 'Dinheiro', 'Outro'];
+const FORMAS_PAGAMENTO = ['PIX', 'Mercado Pago', 'Dinheiro', 'Outro'];
 
 export default function ConfiguracoesPage() {
   const supabase = useMemo(() => createClient(), []);
@@ -28,7 +28,6 @@ export default function ConfiguracoesPage() {
   const [pagamentos, setPagamentos] = useState<PagamentosConfig>({
     chave_pix: '', chave_pix_tipo: 'aleatoria', forma_pagamento_padrao: 'PIX',
     mercadopago_token: '', mercadopago_webhook_secret: '',
-    asaas_token: '', asaas_webhook_token: '', picpay_token: '',
   });
   const [avisos, setAvisos] = useState<AvisosConfig>({ grupo_whatsapp_id: '' });
   const [telasConfig, setTelasConfig] = useState<{ custo_por_tela: string; custo_assist_plus: string }>({
@@ -406,29 +405,9 @@ export default function ConfiguracoesPage() {
             </div>
           </Card>
 
-          <Card title="Asaas">
-            <div className="space-y-3">
-              <Input label="API Key" type="password" value={pagamentos.asaas_token} onChange={(e) => setPagamentos({ ...pagamentos, asaas_token: e.target.value })} />
-              <Input label="Token de autenticação do Webhook" type="password" value={pagamentos.asaas_webhook_token} onChange={(e) => setPagamentos({ ...pagamentos, asaas_webhook_token: e.target.value })} hint="Defina um valor aqui e cole o mesmo no campo 'Token de autenticação' ao criar o webhook no Asaas" />
-              {origem && (
-                <div>
-                  <span className="block text-xs font-medium text-slate-600 mb-1">URL do Webhook (cole no painel do Asaas)</span>
-                  <div className="flex gap-2">
-                    <div className="flex-1 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs truncate">{origem}/api/webhook/asaas</div>
-                    <Btn size="sm" variant="secondary" onClick={() => copiar(`${origem}/api/webhook/asaas`)}><Copy size={14} /></Btn>
-                  </div>
-                </div>
-              )}
-            </div>
-          </Card>
-
-          <Card title="PicPay">
-            <Input label="Token — PicPay Empresas" type="password" value={pagamentos.picpay_token} onChange={(e) => setPagamentos({ ...pagamentos, picpay_token: e.target.value })} hint="Disponível se sua conta PicPay Empresas tiver acesso à API de pagamentos" />
-          </Card>
-
           <p className="text-xs text-slate-400">
             Com o token e o webhook configurados, use o botão &quot;Gerar cobrança&quot; em Financeiro &gt; Receitas
-            para criar um PIX real no Asaas/Mercado Pago — quando o cliente pagar, a cobrança é dada como paga
+            para criar um PIX real no Mercado Pago — quando o cliente pagar, a cobrança é dada como paga
             automaticamente aqui no sistema.
           </p>
 
@@ -525,7 +504,7 @@ export default function ConfiguracoesPage() {
               />
               <p className="text-xs text-slate-400">
                 Variáveis disponíveis: {'{nome}'}, {'{valor}'}, {'{vencimento}'}, {'{descricao}'} e {'{pix}'}. O botão de
-                copiar PIX é enviado junto com a mensagem quando há um código PIX disponível (gerado no Asaas/Mercado
+                copiar PIX é enviado junto com a mensagem quando há um código PIX disponível (gerado no Mercado
                 Pago ou a chave PIX fixa em Pagamentos).
               </p>
             </div>
@@ -546,11 +525,18 @@ export default function ConfiguracoesPage() {
                 onChange={(e) => setAvisos({ ...avisos, grupo_whatsapp_id: e.target.value })}
                 hint="O ID de um grupo do WhatsApp sempre termina em @g.us. Peça o ID do grupo ao suporte do seu servidor Uazapi, ou verifique no painel dele em Grupos."
               />
-              <p className="text-xs text-slate-400">
-                Todo dia, junto com a rotina de cobrança automática (10h), o sistema envia um resumo dos
-                recebimentos do dia anterior para este grupo — assim os administradores acompanham sem precisar
-                abrir o painel.
-              </p>
+              <div className="text-xs text-slate-400 space-y-1">
+                <p>Neste grupo os administradores recebem, em tempo real:</p>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li>🆕 quando um novo cliente é cadastrado;</li>
+                  <li>✅ quando um pagamento é recebido (registro manual ou baixa automática do Mercado Pago);</li>
+                  <li>🚨 quando um cliente precisa de atendimento humano no suporte.</li>
+                </ul>
+                <p>
+                  Além disso, todo dia junto com a rotina de cobrança automática (10h), é enviado um resumo dos
+                  recebimentos do dia anterior.
+                </p>
+              </div>
             </div>
           </Card>
           <Btn onClick={() => salvarSetting('avisos', avisos)} disabled={salvando}>Salvar avisos</Btn>

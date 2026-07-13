@@ -4,7 +4,8 @@ Este fluxo roda todo dia às 10h e chama a rotina automática do sistema, que:
 
 1. Envia a cobrança (com botão de copiar PIX) para todo cliente que **vence hoje**.
 2. Envia um aviso de atraso para quem **venceu ontem e ainda não pagou**.
-3. Manda um resumo dos recebimentos de ontem para o **grupo de aviso** dos administradores (se configurado em Configurações > Avisos).
+
+> Os avisos ao **grupo de administradores** (novo cliente, pagamento recebido e pedido de atendimento humano) não dependem mais deste fluxo — são enviados na hora do acontecimento. Veja em Configurações > Avisos.
 
 ## Como importar
 

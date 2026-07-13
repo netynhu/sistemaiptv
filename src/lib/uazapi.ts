@@ -82,7 +82,7 @@ export async function sendText(cfg: UazapiConfig, number: string, text: string) 
 // "button"), usando o formato "texto|copy:codigo" documentado pela Uazapi. Não usamos o
 // endpoint /send/pix-button porque ele serve para uma chave PIX estática do recebedor
 // (CPF/CNPJ/telefone/email/EVP) — aqui o código pode ser um "copia e cola" dinâmico gerado
-// pelo Asaas/Mercado Pago, que não é uma chave PIX válida.
+// pelo Mercado Pago, que não é uma chave PIX válida.
 export async function sendPixButton(
   cfg: UazapiConfig,
   number: string,

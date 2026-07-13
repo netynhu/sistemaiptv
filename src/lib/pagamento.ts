@@ -1,21 +1,22 @@
-// Dá baixa automática numa cobrança quando um gateway (Asaas/Mercado Pago) confirma o pagamento
+// Dá baixa automática numa cobrança quando o Mercado Pago confirma o pagamento
 // via webhook. Replica os mesmos efeitos do "Registrar pagamento" manual em Financeiro > Receitas:
 // marca como paga, renova o vencimento do cliente e já lança a próxima receita, e gera a comissão
 // do indicador quando aplicável.
 
 import { createAdminClient } from '@/lib/supabase/server';
+import { avisarGrupo, montarAvisoPagamento } from '@/lib/avisos';
 import { addMeses, hojeISO } from '@/lib/utils';
 import type { Cliente, Cobranca } from '@/types';
 
 export async function darBaixaAutomatica(
-  externoProvedor: 'asaas' | 'mercadopago',
+  externoProvedor: 'mercadopago',
   externoId: string,
   formaPagamento: string
 ): Promise<{ ok: true; cobrancaId: string; jaEstavaPaga: boolean } | { ok: false; motivo: string }> {
   const admin = createAdminClient();
   const { data: cobrancaRaw, error } = await admin
     .from('cobrancas')
-    .select('*, clientes(*, planos(*), revendedores(*))')
+    .select('*, clientes(*, planos(*), revendedores(*)), revendedores(*)')
     .eq('externo_provedor', externoProvedor)
     .eq('externo_id', externoId)
     .maybeSingle();
@@ -65,6 +66,10 @@ export async function darBaixaAutomatica(
       });
     }
   }
+
+  // Avisa o grupo de administradores que o pagamento entrou (só na primeira baixa —
+  // o webhook pode repetir, mas jaEstavaPaga acima já corta as repetições).
+  await avisarGrupo(montarAvisoPagamento({ ...cobranca, forma_pagamento: formaPagamento }));
 
   return { ok: true, cobrancaId: cobranca.id, jaEstavaPaga: false };
 }
